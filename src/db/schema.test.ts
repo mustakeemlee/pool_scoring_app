@@ -137,4 +137,25 @@ describe('initial schema', () => {
     expect(row.rows[0].grade).toBe('B');
     expect(row.rows[0].is_provisional).toBe(true);
   });
+
+  it('defaults is_period_closed to false and allows it to be set true', async () => {
+    const season = await client.query(
+      `insert into seasons (name, start_date) values ('Test Season 6', '2026-01-01') returning id`,
+    );
+    const playerA = await client.query(`insert into players (full_name) values ('Period Player A') returning id`);
+    const playerB = await client.query(`insert into players (full_name) values ('Period Player B') returning id`);
+
+    const inserted = await client.query(
+      `insert into matches (season_id, match_date, player_a_id, player_b_id, frames_a, frames_b, winner_id)
+       values ($1, '2026-01-08', $2, $3, 5, 3, $2) returning id, is_period_closed`,
+      [season.rows[0].id, playerA.rows[0].id, playerB.rows[0].id],
+    );
+    expect(inserted.rows[0].is_period_closed).toBe(false);
+
+    const updated = await client.query(
+      `update matches set is_period_closed = true where id = $1 returning is_period_closed`,
+      [inserted.rows[0].id],
+    );
+    expect(updated.rows[0].is_period_closed).toBe(true);
+  });
 });
