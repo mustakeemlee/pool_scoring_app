@@ -1,0 +1,22 @@
+{
+  "name": "pool-league-rating-engine",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run src/rating",
+    "test:integration": "vitest run src/db",
+    "test": "npm run test:unit && npm run test:integration",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5",
+    "@types/node": "^20.14.15",
+    "@types/pg": "^8.11.6"
+  },
+  "dependencies": {
+    "pg": "^8.12.0"
+  }
+}
