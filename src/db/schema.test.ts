@@ -4,7 +4,7 @@ import { Client } from 'pg';
 import { applyMigrations } from './applyMigrations';
 
 const ADMIN_CONNECTION_STRING =
-  process.env.TEST_DATABASE_URL ?? 'postgres://postgres:postgres@localhost:54329/postgres';
+  process.env.TEST_DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:54322/postgres';
 
 let client: Client;
 

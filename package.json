@@ -6,17 +6,20 @@
   "scripts": {
     "test:unit": "vitest run src/rating",
     "test:integration": "vitest run src/db",
-    "test": "npm run test:unit && npm run test:integration",
-    "db:up": "docker compose up -d postgres",
-    "db:down": "docker compose down"
+    "test:api": "vitest run src/api",
+    "test": "npm run test:unit && npm run test:integration && npm run test:api",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop"
   },
   "devDependencies": {
-    "typescript": "^5.5.4",
-    "vitest": "^2.0.5",
     "@types/node": "^20.14.15",
-    "@types/pg": "^8.11.6"
+    "@types/pg": "^8.11.6",
+    "supabase": "^2.109.1",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
     "pg": "^8.12.0"
   }
 }
