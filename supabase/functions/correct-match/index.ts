@@ -30,26 +30,23 @@ Deno.serve(async (req: Request) => {
   if (original.is_period_closed) {
     return jsonResponse({ error: 'Cannot correct a match whose week has already closed' }, 400);
   }
-
-  const { error: voidError } = await db
-    .from('matches')
-    .update({ is_voided: true })
-    .eq('id', body.match_id);
-  if (voidError) return jsonResponse({ error: voidError.message }, 500);
-
-  const { error: voidAuditError } = await db.from('match_audit_log').insert({
-    match_id: body.match_id,
-    changed_by: admin.id,
-    change_type: 'voided',
-    old_values: original,
-  });
-  if (voidAuditError) return jsonResponse({ error: voidAuditError.message }, 500);
+  if (original.is_voided) {
+    return jsonResponse({ error: 'Cannot correct a match that has already been voided' }, 400);
+  }
 
   const framesA = body.frames_a ?? original.frames_a;
   const framesB = body.frames_b ?? original.frames_b;
   const matchDate = body.match_date ?? original.match_date;
   const winnerId = framesA > framesB ? original.player_a_id : original.player_b_id;
 
+  // Insert the corrected match BEFORE voiding the original. This way, if the
+  // insert fails (e.g. frames_a === frames_b violates the matches table's
+  // check constraint), the function returns an error having changed nothing:
+  // the original match is still live and un-voided, so the admin can safely
+  // retry correct-match with corrected data. Voiding first (the old order)
+  // meant a failed insert could strand the original as voided with no
+  // replacement, and a subsequent fresh enter-match call for that pairing
+  // would silently double-count the voided match's rating impact.
   const { data: corrected, error: insertError } = await db
     .from('matches')
     .insert({
@@ -73,6 +70,20 @@ Deno.serve(async (req: Request) => {
     new_values: { ...body, frames_a: framesA, frames_b: framesB, match_date: matchDate },
   });
   if (createdAuditError) return jsonResponse({ error: createdAuditError.message }, 500);
+
+  const { error: voidError } = await db
+    .from('matches')
+    .update({ is_voided: true })
+    .eq('id', body.match_id);
+  if (voidError) return jsonResponse({ error: voidError.message }, 500);
+
+  const { error: voidAuditError } = await db.from('match_audit_log').insert({
+    match_id: body.match_id,
+    changed_by: admin.id,
+    change_type: 'voided',
+    old_values: original,
+  });
+  if (voidAuditError) return jsonResponse({ error: voidAuditError.message }, 500);
 
   const replayAResult = await replayOpenWeek(db, original.season_id, original.player_a_id);
   if (replayAResult.error) return jsonResponse({ error: replayAResult.error }, 500);
@@ -107,6 +118,20 @@ async function replayOpenWeek(
   const rating = lastClosedEvent ? lastClosedEvent.rating_after : 1500;
   const rd = lastClosedEvent ? lastClosedEvent.rd_after : 350;
 
+  // KNOWN LIMITATION (documented, not fixed — see task-8 review finding 1):
+  // chronological order here is match_date, then created_at as a tiebreaker.
+  // The corrected match is a freshly-inserted row, so its created_at is
+  // always "now" — later than any other same-day match that existed before
+  // this correction. If a player has multiple matches on the same
+  // match_date in the open week and this call is correcting an earlier one,
+  // the corrected row can sort *after* a later same-day match, producing a
+  // different (and technically incorrect) replay order for that edge case.
+  // Correction ordering is only guaranteed correct when a player has at
+  // most one match per day in the open week, or when correcting the most
+  // recent same-day match. A full fix would need a stable same-day
+  // tiebreaker independent of row-insertion time (e.g. an explicit
+  // sequence/slot number), which is out of scope for this open-week-only
+  // correction feature.
   const { data: openMatches } = await db
     .from('matches')
     .select('id, player_a_id, player_b_id, frames_a, frames_b, match_date, created_at')
@@ -133,11 +158,35 @@ async function replayOpenWeek(
 
   let currentRating = rating;
   const currentRd = rd;
+  // TODO(Task 9): verify matches_played semantics once close-week exists —
+  // see task-8 review finding 4. This starts the count at 0 and counts only
+  // this open week's matches, so the update below writes matches_played as
+  // just the open week's count rather than prior-closed-weeks' count plus
+  // this week's on top. enter-match treats matches_played as cumulative
+  // across the season, so this may be resetting it incorrectly — but that
+  // depends on how close-week (not yet built) is expected to interact with
+  // matches_played at period boundaries, so it isn't safe to change here yet.
   let matchesPlayed = 0;
 
   for (const match of openMatches ?? []) {
     const isPlayerA = match.player_a_id === playerId;
     const opponentId = isPlayerA ? match.player_b_id : match.player_a_id;
+    // KNOWN LIMITATION (documented, not fixed — see task-8 review finding 2):
+    // this reads the opponent's LIVE current rating from
+    // player_season_ratings, not their rating at the specific point in time
+    // this match is being replayed. If the opponent also played other
+    // matches later in the same open week, their current rating already
+    // reflects those later matches, and that "future" information leaks
+    // backward into recomputing this earlier match's Elo delta — the result
+    // can differ from when the match was first entered, even though nothing
+    // about this specific match changed. This is accurate when the opponent
+    // had no other matches in the same open week, but can drift if they
+    // did. A fully correct fix would require replaying all affected
+    // players' matches together in true joint chronological order (using
+    // each match's actual rating_events snapshots rather than live table
+    // state), which edges toward the "full cross-period replay" complexity
+    // this plan deliberately scoped out of Phase 2 in favor of
+    // open-week-only corrections.
     const { data: opponentRow } = await db
       .from('player_season_ratings')
       .select('rating, rd')
@@ -189,5 +238,18 @@ async function replayOpenWeek(
     return { error: `Failed to update player_season_ratings: ${updateError.message}` };
   }
 
+  // KNOWN LIMITATION (documented, not fixed — see task-8 review finding 3):
+  // this function updates rating_events and player_season_ratings but never
+  // recomputes player_statistics (wins, losses, streaks, frames_won/lost,
+  // form_5/10, form_score) for either player. Those fields still reflect
+  // the voided match's original numbers until the player's next fresh
+  // enter-match call, since enter-match's updatePlayerAfterMatch
+  // recomputes player_statistics from the full match history each time —
+  // so a subsequent match will self-correct these fields, but they're
+  // stale in the interim between a correction and that player's next
+  // match. Correctly recomputing player_statistics here would mean reusing
+  // the same aggregation logic enter-match's updatePlayerAfterMatch already
+  // performs — worth extracting into a shared helper in a future task
+  // rather than duplicating that logic inline in this replay.
   return { error: null };
 }
