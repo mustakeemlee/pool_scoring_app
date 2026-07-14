@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
     framesB: frames_b,
   });
 
-  await db.from('rating_events').insert([
+  const { error: ratingEventsError } = await db.from('rating_events').insert([
     {
       match_id: match.id,
       player_id: player_a_id,
@@ -109,8 +109,9 @@ Deno.serve(async (req: Request) => {
       event_type: 'instant',
     },
   ]);
+  if (ratingEventsError) return jsonResponse({ error: ratingEventsError.message }, 500);
 
-  await updatePlayerAfterMatch(db, {
+  const updateAResult = await updatePlayerAfterMatch(db, {
     playerId: player_a_id,
     seasonId: season_id,
     newRating: nudge.newRatingA,
@@ -121,7 +122,9 @@ Deno.serve(async (req: Request) => {
     framesAgainst: frames_b,
     opponentRating: ratingB.rating,
   });
-  await updatePlayerAfterMatch(db, {
+  if (updateAResult.error) return jsonResponse({ error: updateAResult.error }, 500);
+
+  const updateBResult = await updatePlayerAfterMatch(db, {
     playerId: player_b_id,
     seasonId: season_id,
     newRating: nudge.newRatingB,
@@ -132,13 +135,15 @@ Deno.serve(async (req: Request) => {
     framesAgainst: frames_a,
     opponentRating: ratingA.rating,
   });
+  if (updateBResult.error) return jsonResponse({ error: updateBResult.error }, 500);
 
-  await db.from('match_audit_log').insert({
+  const { error: auditLogError } = await db.from('match_audit_log').insert({
     match_id: match.id,
     changed_by: admin.id,
     change_type: 'created',
     new_values: body,
   });
+  if (auditLogError) return jsonResponse({ error: auditLogError.message }, 500);
 
   return jsonResponse({ match_id: match.id }, 201);
 });
@@ -158,7 +163,7 @@ interface UpdatePlayerArgs {
 async function updatePlayerAfterMatch(
   db: ReturnType<typeof createServiceRoleClient>,
   args: UpdatePlayerArgs,
-) {
+): Promise<{ error: string | null }> {
   const matchesPlayed = args.priorMatchesPlayed + 1;
   const seasonPointsEarned = calculateSeasonPoints({
     won: args.won,
@@ -168,7 +173,7 @@ async function updatePlayerAfterMatch(
     opponentRating: args.opponentRating,
   });
 
-  await db
+  const { error: ratingUpdateError } = await db
     .from('player_season_ratings')
     .update({
       rating: args.newRating,
@@ -179,6 +184,9 @@ async function updatePlayerAfterMatch(
     })
     .eq('player_id', args.playerId)
     .eq('season_id', args.seasonId);
+  if (ratingUpdateError) {
+    return { error: `Failed to update player_season_ratings: ${ratingUpdateError.message}` };
+  }
 
   const { data: pastMatches } = await db
     .from('matches')
@@ -216,7 +224,7 @@ async function updatePlayerAfterMatch(
   const last5 = outcomes.slice(-5);
   const last10 = outcomes.slice(-10);
 
-  await db.from('player_statistics').upsert(
+  const { error: statsError } = await db.from('player_statistics').upsert(
     {
       player_id: args.playerId,
       season_id: args.seasonId,
@@ -233,4 +241,9 @@ async function updatePlayerAfterMatch(
     },
     { onConflict: 'player_id,season_id' },
   );
+  if (statsError) {
+    return { error: `Failed to upsert player_statistics: ${statsError.message}` };
+  }
+
+  return { error: null };
 }

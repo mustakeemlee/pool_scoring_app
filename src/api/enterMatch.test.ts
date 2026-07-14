@@ -77,4 +77,52 @@ describe('POST /functions/v1/enter-match', () => {
     const auditLog = await dbClient.query(`select change_type from match_audit_log where match_id in (select id from matches where player_a_id = $1)`, [playerA]);
     expect(auditLog.rows[0].change_type).toBe('created');
   });
+
+  // Regression test: avg_opponent_rating must use each opponent's rating AT THE
+  // TIME of the match (their rating_before snapshot in rating_events), not their
+  // current/latest rating. A single-match test can't distinguish these two
+  // behaviors because a player's first-ever match always has an opponent whose
+  // "current" and "at match time" ratings are identical (both 1500, the
+  // baseline). This scenario is the minimal case where they diverge: B's rating
+  // changes between match 1 (A beats B) and match 3 (B beats A), so if the
+  // implementation incorrectly used B's *current* rating to compute A's
+  // avg_opponent_rating, it would get a different (wrong) number than using B's
+  // rating_before snapshot from match 1.
+  it('computes avg_opponent_rating from each opponent\'s rating at match time, not their current rating', async () => {
+    const playerA = await createPlayer('Snapshot Player A');
+    const playerB = await createPlayer('Snapshot Player B');
+    const playerC = await createPlayer('Snapshot Player C');
+
+    async function enterMatch(matchDate: string, pA: string, pB: string, framesA: number, framesB: number) {
+      const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          season_id: seasonId,
+          match_date: matchDate,
+          player_a_id: pA,
+          player_b_id: pB,
+          frames_a: framesA,
+          frames_b: framesB,
+        }),
+      });
+      expect(response.status).toBe(201);
+    }
+
+    // 1. A beats B, 5-3 -> A: 1500 -> 1528.125, B: 1500 -> 1471.875
+    await enterMatch('2026-02-01', playerA, playerB, 5, 3);
+    // 2. A beats C, 5-2 -> A going in at 1528.125, C going in at 1500 (first match)
+    await enterMatch('2026-02-02', playerA, playerC, 5, 2);
+    // 3. B beats A, 5-1 -> B going in at 1471.875, A going in at whatever it became after match 2
+    await enterMatch('2026-02-03', playerB, playerA, 5, 1);
+
+    const statsA = await dbClient.query(
+      `select avg_opponent_rating from player_statistics where player_id = $1 and season_id = $2`,
+      [playerA, seasonId],
+    );
+
+    // A's opponents at match time: B@1500 (match 1), C@1500 (match 2), B@1471.875 (match 3)
+    const expectedAvgOpponentRating = (1500 + 1500 + 1471.875) / 3; // 1490.625
+    expect(Number(statsA.rows[0].avg_opponent_rating)).toBeCloseTo(expectedAvgOpponentRating, 2);
+  });
 });
