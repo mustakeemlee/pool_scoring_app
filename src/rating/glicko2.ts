@@ -1,5 +1,5 @@
 // src/rating/glicko2.ts
-import { GLICKO2_SCALE, GLICKO2_TAU, GLICKO2_CONVERGENCE_EPSILON, RD_FLOOR } from './constants.js';
+import { GLICKO2_SCALE, GLICKO2_TAU, GLICKO2_CONVERGENCE_EPSILON, RD_FLOOR, BASELINE_RATING } from './constants.js';
 
 export interface Glicko2PlayerState {
   rating: number;
@@ -14,11 +14,11 @@ export interface Glicko2Opponent {
 }
 
 function toScale(rating: number, rd: number): { mu: number; phi: number } {
-  return { mu: (rating - 1500) / GLICKO2_SCALE, phi: rd / GLICKO2_SCALE };
+  return { mu: (rating - BASELINE_RATING) / GLICKO2_SCALE, phi: rd / GLICKO2_SCALE };
 }
 
 function fromScale(mu: number, phi: number): { rating: number; rd: number } {
-  return { rating: GLICKO2_SCALE * mu + 1500, rd: GLICKO2_SCALE * phi };
+  return { rating: GLICKO2_SCALE * mu + BASELINE_RATING, rd: GLICKO2_SCALE * phi };
 }
 
 function g(phi: number): number {

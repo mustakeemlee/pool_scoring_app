@@ -27,6 +27,13 @@ export interface InstantNudgeInput {
   framesB: number;
 }
 
+/**
+ * All fields below describe player A's perspective only. A caller that also
+ * needs to write a rating_events row for player B should derive:
+ *   expectedScoreB = 1 - expectedScoreA
+ *   actualScoreB   = 1 - actualScoreA
+ *   deltaB         = -deltaA
+ */
 export interface InstantNudgeOutput {
   expectedScoreA: number;
   actualScoreA: number;

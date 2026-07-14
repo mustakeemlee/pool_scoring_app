@@ -67,6 +67,9 @@ create table matches (
 );
 
 create index matches_season_idx on matches (season_id);
+create index matches_player_a_idx on matches (player_a_id);
+create index matches_player_b_idx on matches (player_b_id);
+create index matches_match_date_idx on matches (match_date);
 
 create table match_audit_log (
   id uuid primary key default gen_random_uuid(),
@@ -85,8 +88,10 @@ create table rating_events (
   season_id uuid not null references seasons(id),
   rating_before numeric not null,
   rd_before numeric not null,
+  volatility_before numeric,
   rating_after numeric not null,
   rd_after numeric not null,
+  volatility_after numeric,
   expected_score numeric,
   actual_score numeric,
   delta numeric not null,
@@ -96,6 +101,7 @@ create table rating_events (
 );
 
 create index rating_events_player_season_idx on rating_events (player_id, season_id);
+create index rating_events_match_idx on rating_events (match_id);
 
 create table weekly_rankings (
   id uuid primary key default gen_random_uuid(),
@@ -104,6 +110,7 @@ create table weekly_rankings (
   player_id uuid not null references players(id),
   rating numeric not null,
   rd numeric not null,
+  volatility numeric not null,
   rank integer not null,
   grade text not null,
   win_pct numeric not null,
