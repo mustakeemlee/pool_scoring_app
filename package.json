@@ -9,7 +9,8 @@
     "test:api": "vitest run src/api",
     "test": "npm run test:unit && npm run test:integration && npm run test:api",
     "supabase:start": "supabase start",
-    "supabase:stop": "supabase stop"
+    "supabase:stop": "supabase stop",
+    "seed": "node scripts/seed.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.14.15",
