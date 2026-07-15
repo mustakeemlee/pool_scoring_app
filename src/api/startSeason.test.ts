@@ -86,6 +86,20 @@ describe('POST /functions/v1/start-season', () => {
       [strayPlayerId, newSeasonId],
     );
     expect(strayEvent.rows.length).toBe(0);
+
+    // Fix 4 (whole-branch review): the previous season must be marked
+    // 'completed' once the new season has been successfully created and
+    // carried over - otherwise both seasons could sit at status='active'
+    // simultaneously (flagged as a spec-level gap during Task 10's review,
+    // confirmed real and fixed as part of the whole-branch review's fix
+    // round).
+    const previousSeasonStatus = await dbClient.query(`select status from seasons where id = $1`, [oldSeasonId]);
+    expect(previousSeasonStatus.rows[0].status).toBe('completed');
+
+    // The brand-new season itself must be unaffected by this update - still
+    // 'active', not accidentally overwritten too.
+    const newSeasonStatus = await dbClient.query(`select status from seasons where id = $1`, [newSeasonId]);
+    expect(newSeasonStatus.rows[0].status).toBe('active');
   });
 
   it('creates a new season with no carryover when previous_season_id is omitted', async () => {
@@ -106,5 +120,14 @@ describe('POST /functions/v1/start-season', () => {
       [newSeasonId],
     );
     expect(rows.rows.length).toBe(0);
+
+    // Fix 4's previous-season-completion update lives entirely inside the
+    // `if (body.previous_season_id)` block, so with no previous_season_id
+    // it must be skipped outright - nothing else in the database should be
+    // touched by it. There's no previous season to check here (that's the
+    // point), but this call succeeding at all (201, no crash) confirms the
+    // guard correctly no-ops rather than erroring on a missing id.
+    const newSeasonStatus = await dbClient.query(`select status from seasons where id = $1`, [newSeasonId]);
+    expect(newSeasonStatus.rows[0].status).toBe('active');
   });
 });

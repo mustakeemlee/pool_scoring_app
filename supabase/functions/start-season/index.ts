@@ -97,6 +97,26 @@ Deno.serve(async (req: Request) => {
         );
       }
     }
+
+    // Mark the previous season 'completed' now that the new season exists
+    // and carryover has finished without error. Design spec 5.4 never
+    // states this explicitly, and the original implementation never did it
+    // either, so two seasons could sit at status='active' simultaneously
+    // indefinitely (flagged during Task 10's review, fixed here). Placed
+    // after the carryover loop rather than before it so a mid-loop carryover
+    // failure (which already returns a 500 above) leaves the previous
+    // season's status untouched instead of marking it completed while its
+    // carryover is only partially done.
+    const { error: completePreviousError } = await db
+      .from('seasons')
+      .update({ status: 'completed' })
+      .eq('id', body.previous_season_id);
+    if (completePreviousError) {
+      return jsonResponse(
+        { error: `Failed to mark previous season as completed: ${completePreviousError.message}` },
+        500,
+      );
+    }
   }
 
   return jsonResponse({ season_id: newSeason.id }, 201);

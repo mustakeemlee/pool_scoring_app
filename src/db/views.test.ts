@@ -68,3 +68,71 @@ describe('grade_distribution_view', () => {
     expect(result.rows).toEqual([{ grade: 'A', player_count: '1' }]);
   });
 });
+
+// Fix 1 (whole-branch review): leaderboard_view/grade_distribution_view had
+// no PostgREST grants for anon/authenticated, confirmed live during the
+// whole-branch review ("set role anon; select * from leaderboard_view" ->
+// ERROR 42501 permission denied for view leaderboard_view). Design spec
+// section 6 says Phase 3's frontend reads these views directly via
+// PostgREST as a public/authenticated user, so this is a real in-scope gap,
+// not a future concern. Postgres roles are cluster-wide (not per-database),
+// so the anon/authenticated roles Supabase provisions already exist in this
+// scratch database's cluster - SET ROLE lets a superuser connection assume
+// them directly without a separate PostgREST round-trip.
+describe('view grants for anon/authenticated (PostgREST access)', () => {
+  afterAll(async () => {
+    await client.query('reset role');
+  });
+
+  it('allows anon to select from leaderboard_view', async () => {
+    await client.query('set role anon');
+    try {
+      const result = await client.query(
+        `select player_id from leaderboard_view where season_id = $1`,
+        [seasonId],
+      );
+      expect(result.rows.length).toBeGreaterThan(0);
+    } finally {
+      await client.query('reset role');
+    }
+  });
+
+  it('allows anon to select from grade_distribution_view', async () => {
+    await client.query('set role anon');
+    try {
+      const result = await client.query(
+        `select grade from grade_distribution_view where season_id = $1`,
+        [seasonId],
+      );
+      expect(result.rows.length).toBeGreaterThan(0);
+    } finally {
+      await client.query('reset role');
+    }
+  });
+
+  it('allows authenticated to select from leaderboard_view', async () => {
+    await client.query('set role authenticated');
+    try {
+      const result = await client.query(
+        `select player_id from leaderboard_view where season_id = $1`,
+        [seasonId],
+      );
+      expect(result.rows.length).toBeGreaterThan(0);
+    } finally {
+      await client.query('reset role');
+    }
+  });
+
+  it('allows authenticated to select from grade_distribution_view', async () => {
+    await client.query('set role authenticated');
+    try {
+      const result = await client.query(
+        `select grade from grade_distribution_view where season_id = $1`,
+        [seasonId],
+      );
+      expect(result.rows.length).toBeGreaterThan(0);
+    } finally {
+      await client.query('reset role');
+    }
+  });
+});
