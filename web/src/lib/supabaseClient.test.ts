@@ -10,7 +10,7 @@ describe('supabaseClient', () => {
   it('constructs a client when env vars are present', async () => {
     const { supabase } = await import('./supabaseClient');
     expect(supabase).toBeDefined();
-    expect(supabase.supabaseUrl).toBe('http://127.0.0.1:54321');
+    expect((supabase as unknown as { supabaseUrl: string }).supabaseUrl).toBe('http://127.0.0.1:54321');
   });
 
   it('throws a clear error when env vars are missing', async () => {
