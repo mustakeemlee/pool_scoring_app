@@ -12,6 +12,7 @@ import { ForgotPasswordPage } from '@/pages/admin/ForgotPassword';
 import { ResetPasswordPage } from '@/pages/admin/ResetPassword';
 import { EnterMatchPage } from '@/pages/admin/EnterMatch';
 import { CorrectMatchPage } from '@/pages/admin/CorrectMatch';
+import { CloseWeekPage } from '@/pages/admin/CloseWeek';
 
 export function App() {
   return (
@@ -30,6 +31,7 @@ export function App() {
             <Route element={<AdminLayout />}>
               <Route path="/admin/enter-match" element={<EnterMatchPage />} />
               <Route path="/admin/correct-match" element={<CorrectMatchPage />} />
+              <Route path="/admin/close-week" element={<CloseWeekPage />} />
             </Route>
           </Route>
           <Route path="*" element={<NotFoundPage />} />
