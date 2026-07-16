@@ -14,3 +14,50 @@ services:
     volumes:
       - ./supabase/migrations:/docker-entrypoint-initdb.d/migrations:ro
       - ./docker/db-init/zz-set-role-passwords.sh:/docker-entrypoint-initdb.d/zz-set-role-passwords.sh:ro
+
+  auth:
+    image: public.ecr.aws/supabase/gotrue:v2.192.0
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      API_EXTERNAL_URL: http://localhost:8000
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgresql://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:8080
+      GOTRUE_URI_ALLOW_LIST: http://localhost:8080,http://localhost:8080/admin/reset-password
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+
+  rest:
+    image: public.ecr.aws/supabase/postgrest:v14.14
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgresql://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_MAX_ROWS: "1000"
+
+  kong:
+    image: public.ecr.aws/supabase/kong:2.8.1
+    depends_on:
+      - auth
+      - rest
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+    volumes:
+      - ./docker/kong.yml:/home/kong/kong.yml:ro
+    ports:
+      - "8000:8000"
