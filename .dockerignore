@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+.git
+.claude
+.superpowers
+*.tsbuildinfo
+.env
+.env.selfhost
+.env.local
+web/.env.local
