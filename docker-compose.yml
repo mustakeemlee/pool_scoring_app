@@ -61,3 +61,13 @@ services:
       - ./docker/kong.yml:/home/kong/kong.yml:ro
     ports:
       - "8000:8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_SUPABASE_URL: http://localhost:8000
+        VITE_SUPABASE_ANON_KEY: ${ANON_KEY}
+    ports:
+      - "8080:80"
