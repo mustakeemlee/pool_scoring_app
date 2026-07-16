@@ -13,6 +13,7 @@ import { ResetPasswordPage } from '@/pages/admin/ResetPassword';
 import { EnterMatchPage } from '@/pages/admin/EnterMatch';
 import { CorrectMatchPage } from '@/pages/admin/CorrectMatch';
 import { CloseWeekPage } from '@/pages/admin/CloseWeek';
+import { StartSeasonPage } from '@/pages/admin/StartSeason';
 
 export function App() {
   return (
@@ -32,6 +33,7 @@ export function App() {
               <Route path="/admin/enter-match" element={<EnterMatchPage />} />
               <Route path="/admin/correct-match" element={<CorrectMatchPage />} />
               <Route path="/admin/close-week" element={<CloseWeekPage />} />
+              <Route path="/admin/start-season" element={<StartSeasonPage />} />
             </Route>
           </Route>
           <Route path="*" element={<NotFoundPage />} />
