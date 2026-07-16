@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/queryKeys';
 
 const mockToastSuccess = vi.fn();
 vi.mock('sonner', () => ({ toast: { success: (msg: string) => mockToastSuccess(msg) } }));
@@ -27,11 +28,13 @@ import { EnterMatchPage } from './EnterMatch';
 
 function renderPage() {
   const queryClient = new QueryClient();
-  return render(
+  const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+  const utils = render(
     <QueryClientProvider client={queryClient}>
       <EnterMatchPage />
     </QueryClientProvider>,
   );
+  return { ...utils, queryClient, invalidateSpy };
 }
 
 describe('EnterMatchPage', () => {
@@ -64,7 +67,7 @@ describe('EnterMatchPage', () => {
   it('submits a valid match, shows a success toast, and resets the form', async () => {
     mockEnterMatch.mockResolvedValue({ match_id: 'm1' });
     const user = userEvent.setup();
-    renderPage();
+    const { invalidateSpy } = renderPage();
 
     await user.selectOptions(screen.getByLabelText('Player A'), 'Alex Testplayer');
     await user.selectOptions(screen.getByLabelText('Player B'), 'Jordan Testplayer');
@@ -79,6 +82,16 @@ describe('EnterMatchPage', () => {
     );
     expect(mockToastSuccess).toHaveBeenCalledWith(expect.stringContaining('Alex Testplayer wins 5–2'));
     await waitFor(() => expect((screen.getByLabelText('Frames A') as HTMLInputElement).value).toBe(''));
+
+    // Regression coverage: a successful submission must invalidate all five caches that
+    // depend on match results, in this order, so the leaderboard, match history, and
+    // both players' profiles refresh without a manual reload.
+    expect(invalidateSpy).toHaveBeenCalledTimes(5);
+    expect(invalidateSpy).toHaveBeenNthCalledWith(1, { queryKey: queryKeys.leaderboard('s1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(2, { queryKey: queryKeys.matchHistory('s1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(3, { queryKey: queryKeys.playerProfile('p1', 's1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(4, { queryKey: queryKeys.playerProfile('p2', 's1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(5, { queryKey: ['players', 's1'] });
   });
 
   it('shows the edge function error message verbatim on failure', async () => {
