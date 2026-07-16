@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { OddsWidget } from '@/components/OddsWidget';
 import { useActiveSeason } from '@/hooks/useActiveSeason';
 import { usePlayers } from '@/hooks/usePlayers';
@@ -72,6 +73,7 @@ export function EnterMatchPage() {
       toast.success(`${winnerName} wins ${winnerFrames}–${loserFrames}`);
 
       queryClient.invalidateQueries({ queryKey: queryKeys.leaderboard(activeSeason.data.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.gradeDistribution(activeSeason.data.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.matchHistory(activeSeason.data.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.playerProfile(playerAId, activeSeason.data.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.playerProfile(playerBId, activeSeason.data.id) });
@@ -86,6 +88,14 @@ export function EnterMatchPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (activeSeason.isLoading || players.isLoading) {
+    return <Skeleton className="h-64 w-full" />;
+  }
+
+  if (activeSeason.isError || players.isError) {
+    return <p className="text-destructive">Couldn't load the match entry form. Try refreshing.</p>;
   }
 
   return (

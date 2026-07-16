@@ -86,16 +86,17 @@ describe('CorrectMatchPage', () => {
     await waitFor(() => expect(screen.queryByLabelText('Frames A')).not.toBeInTheDocument());
 
     // Regression coverage: a successful correction must invalidate every cache that depends on
-    // match results, in this order, so the open-matches list, leaderboard, match history, and
-    // both players' profiles refresh without a manual reload. Asserting exact call count plus
-    // each call's position (not just membership) means this test fails if an invalidation is
-    // dropped, duplicated, or reordered.
-    expect(invalidateSpy).toHaveBeenCalledTimes(5);
+    // match results, in this order, so the open-matches list, leaderboard, grade distribution,
+    // match history, and both players' profiles refresh without a manual reload. Asserting exact
+    // call count plus each call's position (not just membership) means this test fails if an
+    // invalidation is dropped, duplicated, or reordered.
+    expect(invalidateSpy).toHaveBeenCalledTimes(6);
     expect(invalidateSpy).toHaveBeenNthCalledWith(1, { queryKey: queryKeys.openMatches('s1') });
     expect(invalidateSpy).toHaveBeenNthCalledWith(2, { queryKey: queryKeys.leaderboard('s1') });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(3, { queryKey: queryKeys.matchHistory('s1') });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(4, { queryKey: queryKeys.playerProfile('p1', 's1') });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(5, { queryKey: queryKeys.playerProfile('p2', 's1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(3, { queryKey: queryKeys.gradeDistribution('s1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(4, { queryKey: queryKeys.matchHistory('s1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(5, { queryKey: queryKeys.playerProfile('p1', 's1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(6, { queryKey: queryKeys.playerProfile('p2', 's1') });
   });
 
   it('shows the edge function error message verbatim on failure', async () => {

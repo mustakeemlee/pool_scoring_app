@@ -130,10 +130,11 @@ Supabase Auth's existing local stack.
   action — no custom per-page fetching logic.
 - **Admin writes:** client-side validation mirrors known DB constraints (e.g.
   `frames_a !== frames_b`) before submitting, so obviously-invalid input never
-  round-trips. Server-side failures surface as a toast showing the Edge Function's
-  actual error message verbatim — these are already descriptive (e.g. `"Cannot
-  correct a match whose week has already closed"`), so the frontend doesn't
-  re-interpret them.
+  round-trips. Server-side failures surface as a persistent inline error message
+  (shown until the next submit attempt) displaying the Edge Function's actual
+  error message verbatim — never re-worded, swallowed, or truncated. These are
+  already descriptive (e.g. `"Cannot correct a match whose week has already
+  closed"`), so the frontend doesn't re-interpret them.
 - **Successful mutations:** a success toast (e.g. `"Alex Testplayer +14.2 (1754 →
   1768)"`) plus the cache invalidation from §4.
 - **Close-week/start-season confirm dialogs:** since these are batch, hard-to-undo

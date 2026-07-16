@@ -8,18 +8,11 @@ import { queryKeys } from '@/lib/queryKeys';
 const mockToastSuccess = vi.fn();
 vi.mock('sonner', () => ({ toast: { success: (msg: string) => mockToastSuccess(msg) } }));
 
-vi.mock('@/hooks/useActiveSeason', () => ({
-  useActiveSeason: () => ({ data: { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' } }),
-}));
+const mockUseActiveSeason = vi.fn();
+vi.mock('@/hooks/useActiveSeason', () => ({ useActiveSeason: () => mockUseActiveSeason() }));
 
-vi.mock('@/hooks/usePlayers', () => ({
-  usePlayers: () => ({
-    data: [
-      { id: 'p1', full_name: 'Alex Testplayer', rating: 1600 },
-      { id: 'p2', full_name: 'Jordan Testplayer', rating: 1400 },
-    ],
-  }),
-}));
+const mockUsePlayers = vi.fn();
+vi.mock('@/hooks/usePlayers', () => ({ usePlayers: () => mockUsePlayers() }));
 
 const mockEnterMatch = vi.fn();
 vi.mock('@/lib/edgeFunctions', () => ({ enterMatch: (body: unknown) => mockEnterMatch(body) }));
@@ -41,6 +34,33 @@ describe('EnterMatchPage', () => {
   beforeEach(() => {
     mockEnterMatch.mockReset();
     mockToastSuccess.mockReset();
+    mockUseActiveSeason.mockReturnValue({
+      data: { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' },
+      isLoading: false,
+      isError: false,
+    });
+    mockUsePlayers.mockReturnValue({
+      data: [
+        { id: 'p1', full_name: 'Alex Testplayer', rating: 1600 },
+        { id: 'p2', full_name: 'Jordan Testplayer', rating: 1400 },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+  });
+
+  it('shows a loading skeleton while the active season or players are still loading', () => {
+    mockUsePlayers.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    const { container } = renderPage();
+    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+    expect(screen.queryByText('Enter Match Result')).not.toBeInTheDocument();
+  });
+
+  it('shows an inline error message when the active season or players fail to load', () => {
+    mockUseActiveSeason.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    renderPage();
+    expect(screen.getByText("Couldn't load the match entry form. Try refreshing.")).toBeInTheDocument();
+    expect(screen.queryByText('Enter Match Result')).not.toBeInTheDocument();
   });
 
   it('shows the predicted-odds widget once both players are selected', async () => {
@@ -83,15 +103,16 @@ describe('EnterMatchPage', () => {
     expect(mockToastSuccess).toHaveBeenCalledWith(expect.stringContaining('Alex Testplayer wins 5–2'));
     await waitFor(() => expect((screen.getByLabelText('Frames A') as HTMLInputElement).value).toBe(''));
 
-    // Regression coverage: a successful submission must invalidate all five caches that
-    // depend on match results, in this order, so the leaderboard, match history, and
-    // both players' profiles refresh without a manual reload.
-    expect(invalidateSpy).toHaveBeenCalledTimes(5);
+    // Regression coverage: a successful submission must invalidate all six caches that
+    // depend on match results, in this order, so the leaderboard, grade distribution,
+    // match history, and both players' profiles refresh without a manual reload.
+    expect(invalidateSpy).toHaveBeenCalledTimes(6);
     expect(invalidateSpy).toHaveBeenNthCalledWith(1, { queryKey: queryKeys.leaderboard('s1') });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(2, { queryKey: queryKeys.matchHistory('s1') });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(3, { queryKey: queryKeys.playerProfile('p1', 's1') });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(4, { queryKey: queryKeys.playerProfile('p2', 's1') });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(5, { queryKey: ['players', 's1'] });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(2, { queryKey: queryKeys.gradeDistribution('s1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(3, { queryKey: queryKeys.matchHistory('s1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(4, { queryKey: queryKeys.playerProfile('p1', 's1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(5, { queryKey: queryKeys.playerProfile('p2', 's1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(6, { queryKey: ['players', 's1'] });
   });
 
   it('shows the edge function error message verbatim on failure', async () => {

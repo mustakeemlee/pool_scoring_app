@@ -55,6 +55,7 @@ export function CorrectMatchPage() {
         const seasonId = activeSeason.data.id;
         queryClient.invalidateQueries({ queryKey: queryKeys.openMatches(seasonId) });
         queryClient.invalidateQueries({ queryKey: queryKeys.leaderboard(seasonId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.gradeDistribution(seasonId) });
         queryClient.invalidateQueries({ queryKey: queryKeys.matchHistory(seasonId) });
         queryClient.invalidateQueries({ queryKey: queryKeys.playerProfile(selectedMatch.player_a_id, seasonId) });
         queryClient.invalidateQueries({ queryKey: queryKeys.playerProfile(selectedMatch.player_b_id, seasonId) });
