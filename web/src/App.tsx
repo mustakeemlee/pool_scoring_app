@@ -1,10 +1,15 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { TopNav } from '@/components/TopNav';
+import { AdminRouteGuard } from '@/components/AdminRouteGuard';
+import { AdminLayout } from '@/components/AdminLayout';
 import { LeaderboardPage } from '@/pages/Leaderboard';
 import { PlayerProfilePage } from '@/pages/PlayerProfile';
 import { GradeDistributionPage } from '@/pages/GradeDistribution';
 import { MatchHistoryPage } from '@/pages/MatchHistory';
 import { NotFoundPage } from '@/pages/NotFound';
+import { LoginPage } from '@/pages/admin/Login';
+import { ForgotPasswordPage } from '@/pages/admin/ForgotPassword';
+import { ResetPasswordPage } from '@/pages/admin/ResetPassword';
 
 export function App() {
   return (
@@ -16,6 +21,14 @@ export function App() {
           <Route path="/players/:playerId" element={<PlayerProfilePage />} />
           <Route path="/grades" element={<GradeDistributionPage />} />
           <Route path="/matches" element={<MatchHistoryPage />} />
+          <Route path="/admin/login" element={<LoginPage />} />
+          <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/admin/reset-password" element={<ResetPasswordPage />} />
+          <Route element={<AdminRouteGuard />}>
+            <Route element={<AdminLayout />}>
+              {/* Tasks 14-17 add the four admin action routes here */}
+            </Route>
+          </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
