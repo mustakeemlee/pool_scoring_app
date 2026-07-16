@@ -10,6 +10,7 @@ import { NotFoundPage } from '@/pages/NotFound';
 import { LoginPage } from '@/pages/admin/Login';
 import { ForgotPasswordPage } from '@/pages/admin/ForgotPassword';
 import { ResetPasswordPage } from '@/pages/admin/ResetPassword';
+import { EnterMatchPage } from '@/pages/admin/EnterMatch';
 
 export function App() {
   return (
@@ -26,7 +27,7 @@ export function App() {
           <Route path="/admin/reset-password" element={<ResetPasswordPage />} />
           <Route element={<AdminRouteGuard />}>
             <Route element={<AdminLayout />}>
-              {/* Tasks 14-17 add the four admin action routes here */}
+              <Route path="/admin/enter-match" element={<EnterMatchPage />} />
             </Route>
           </Route>
           <Route path="*" element={<NotFoundPage />} />

@@ -1,0 +1,99 @@
+// web/src/pages/admin/EnterMatch.test.tsx
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const mockToastSuccess = vi.fn();
+vi.mock('sonner', () => ({ toast: { success: (msg: string) => mockToastSuccess(msg) } }));
+
+vi.mock('@/hooks/useActiveSeason', () => ({
+  useActiveSeason: () => ({ data: { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' } }),
+}));
+
+vi.mock('@/hooks/usePlayers', () => ({
+  usePlayers: () => ({
+    data: [
+      { id: 'p1', full_name: 'Alex Testplayer', rating: 1600 },
+      { id: 'p2', full_name: 'Jordan Testplayer', rating: 1400 },
+    ],
+  }),
+}));
+
+const mockEnterMatch = vi.fn();
+vi.mock('@/lib/edgeFunctions', () => ({ enterMatch: (body: unknown) => mockEnterMatch(body) }));
+
+import { EnterMatchPage } from './EnterMatch';
+
+function renderPage() {
+  const queryClient = new QueryClient();
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <EnterMatchPage />
+    </QueryClientProvider>,
+  );
+}
+
+describe('EnterMatchPage', () => {
+  beforeEach(() => {
+    mockEnterMatch.mockReset();
+    mockToastSuccess.mockReset();
+  });
+
+  it('shows the predicted-odds widget once both players are selected', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.selectOptions(screen.getByLabelText('Player A'), 'Alex Testplayer');
+    await user.selectOptions(screen.getByLabelText('Player B'), 'Jordan Testplayer');
+    expect(screen.getByText('Predicted odds')).toBeInTheDocument();
+  });
+
+  it('rejects a tied frame score client-side without calling enterMatch', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.selectOptions(screen.getByLabelText('Player A'), 'Alex Testplayer');
+    await user.selectOptions(screen.getByLabelText('Player B'), 'Jordan Testplayer');
+    await user.type(screen.getByLabelText('Frames A'), '4');
+    await user.type(screen.getByLabelText('Frames B'), '4');
+    await user.click(screen.getByRole('button', { name: 'Submit Match' }));
+
+    expect(screen.getByText('Frame scores cannot be tied.')).toBeInTheDocument();
+    expect(mockEnterMatch).not.toHaveBeenCalled();
+  });
+
+  it('submits a valid match, shows a success toast, and resets the form', async () => {
+    mockEnterMatch.mockResolvedValue({ match_id: 'm1' });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.selectOptions(screen.getByLabelText('Player A'), 'Alex Testplayer');
+    await user.selectOptions(screen.getByLabelText('Player B'), 'Jordan Testplayer');
+    await user.type(screen.getByLabelText('Frames A'), '5');
+    await user.type(screen.getByLabelText('Frames B'), '2');
+    await user.click(screen.getByRole('button', { name: 'Submit Match' }));
+
+    await waitFor(() =>
+      expect(mockEnterMatch).toHaveBeenCalledWith(
+        expect.objectContaining({ season_id: 's1', player_a_id: 'p1', player_b_id: 'p2', frames_a: 5, frames_b: 2 }),
+      ),
+    );
+    expect(mockToastSuccess).toHaveBeenCalledWith(expect.stringContaining('Alex Testplayer wins 5–2'));
+    await waitFor(() => expect((screen.getByLabelText('Frames A') as HTMLInputElement).value).toBe(''));
+  });
+
+  it('shows the edge function error message verbatim on failure', async () => {
+    mockEnterMatch.mockRejectedValue(new Error('new row for relation "matches" violates check constraint'));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.selectOptions(screen.getByLabelText('Player A'), 'Alex Testplayer');
+    await user.selectOptions(screen.getByLabelText('Player B'), 'Jordan Testplayer');
+    await user.type(screen.getByLabelText('Frames A'), '5');
+    await user.type(screen.getByLabelText('Frames B'), '2');
+    await user.click(screen.getByRole('button', { name: 'Submit Match' }));
+
+    await waitFor(() =>
+      expect(screen.getByText('new row for relation "matches" violates check constraint')).toBeInTheDocument(),
+    );
+  });
+});
