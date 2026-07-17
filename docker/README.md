@@ -6,9 +6,10 @@ the `supabase start` CLI workflow used for day-to-day development. See
 `docs/superpowers/specs/2026-07-16-docker-compose-selfhost-design.md` for the
 full design.
 
-Edge Functions (the four admin write actions -- enter-match, correct-match,
-close-week, start-season) are not part of this stack yet; that's Sub-phase B.
-Only the public read-only pages and admin login work here.
+The four admin write actions (enter-match, correct-match, close-week,
+start-season) are self-hosted here too, one `edge-runtime` container per
+function -- the whole app, public pages and the admin workflow, works
+end-to-end on this stack.
 
 ## First-time setup
 
@@ -21,7 +22,9 @@ Only the public read-only pages and admin login work here.
    ```
    docker compose --env-file .env.selfhost up -d --build
    ```
-3. Seed it with realistic demo data:
+3. Seed it with realistic demo data -- this now calls the real `enter-match`
+   and `close-week` functions through Kong, so a successful run also proves
+   the admin write path works end-to-end (not just the public read path):
    ```
    node scripts/seed-selfhost.mjs
    ```

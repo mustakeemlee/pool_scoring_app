@@ -1,11 +1,10 @@
 // scripts/seed-selfhost.mjs
 //
-// Seeds the self-hosted docker-compose stack (Sub-phase A) with realistic
-// demo data. Unlike scripts/seed.mjs (which replays the real enter-match/
-// close-week Edge Functions), this stack has no Edge Runtime yet -- so this
-// script inserts player_season_ratings/matches rows directly via PostgREST.
-// It exists to prove the self-hosted wiring works end-to-end with real data,
-// not to re-verify the rating math (already covered by Phase 1/2's tests).
+// Seeds the self-hosted docker-compose stack with realistic demo data.
+// Now that Sub-phase B self-hosts the four Edge Functions, this calls the
+// real enter-match/close-week endpoints through Kong -- mirroring exactly
+// how scripts/seed.mjs already seeds the CLI stack -- instead of
+// direct-inserting player_season_ratings/matches rows.
 //
 // Usage: node scripts/seed-selfhost.mjs
 // Requires: docker compose --env-file .env.selfhost up -d (see docker/README.md)
@@ -26,7 +25,6 @@ const API_URL = process.env.SELFHOST_API_URL ?? 'http://localhost:8000';
 const env = loadSelfhostEnv();
 
 const FIRST_NAMES = ['Alex', 'Jordan', 'Sam', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Jamie'];
-const GRADES = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D'];
 
 async function main() {
   const serviceClient = createClient(API_URL, env.SERVICE_ROLE_KEY);
@@ -49,6 +47,16 @@ async function main() {
     throw new Error(`Failed to insert admin_users row: ${adminInsertError.message}`);
   }
 
+  const anonClient = createClient(API_URL, env.ANON_KEY);
+  const { data: sessionData, error: signInError } = await anonClient.auth.signInWithPassword({
+    email,
+    password,
+  });
+  if (signInError || !sessionData?.session) {
+    throw new Error(`Failed to sign in seed admin: ${signInError?.message ?? 'no session returned'}`);
+  }
+  const accessToken = sessionData.session.access_token;
+
   const { data: season, error: seasonError } = await serviceClient
     .from('seasons')
     .insert({ name: 'Selfhost Seed Season', start_date: '2026-01-01', status: 'active' })
@@ -66,40 +74,51 @@ async function main() {
     throw new Error(`Failed to create seed players: ${playersError?.message ?? 'no players returned'}`);
   }
 
-  const ratingsRows = players.map((player, index) => ({
-    player_id: player.id,
-    season_id: season.id,
-    rating: 1500 + (players.length - index) * 20,
-    matches_played: 3,
-    is_provisional: false,
-    grade: GRADES[index % GRADES.length],
-    season_points: (players.length - index) * 10,
-  }));
-  const { error: ratingsError } = await serviceClient.from('player_season_ratings').insert(ratingsRows);
-  if (ratingsError) {
-    throw new Error(`Failed to insert player_season_ratings: ${ratingsError.message}`);
-  }
-
-  const matchesRows = [];
-  for (let i = 0; i < players.length - 1; i += 2) {
-    const [a, b] = [players[i].id, players[i + 1].id];
-    matchesRows.push({
-      season_id: season.id,
-      match_date: '2026-01-08',
-      player_a_id: a,
-      player_b_id: b,
-      frames_a: 5,
-      frames_b: 2,
-      winner_id: a,
-      entered_by: userData.user.id,
+  async function enterMatch(playerA, playerB, framesA, framesB, matchDate) {
+    const response = await fetch(`${API_URL}/functions/v1/enter-match`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        season_id: season.id,
+        match_date: matchDate,
+        player_a_id: playerA,
+        player_b_id: playerB,
+        frames_a: framesA,
+        frames_b: framesB,
+      }),
     });
-  }
-  const { error: matchesError } = await serviceClient.from('matches').insert(matchesRows);
-  if (matchesError) {
-    throw new Error(`Failed to insert matches: ${matchesError.message}`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(
+        `enter-match failed (${response.status}) for ${playerA} vs ${playerB} on ${matchDate}: ${body}`,
+      );
+    }
   }
 
-  console.log(`Seeded season ${season.id} with ${players.length} players and ${matchesRows.length} matches.`);
+  async function closeWeek(weekEnding) {
+    const response = await fetch(`${API_URL}/functions/v1/close-week`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ season_id: season.id, week_ending: weekEnding }),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`close-week failed (${response.status}) for week ${weekEnding}: ${body}`);
+    }
+  }
+
+  const weeks = ['2026-01-08', '2026-01-15', '2026-01-22'];
+  for (const weekEnding of weeks) {
+    for (let i = 0; i < players.length - 1; i += 2) {
+      const framesA = Math.floor(Math.random() * 3) + 3; // 3-5
+      const framesB = Math.floor(Math.random() * framesA); // 0..framesA-1, so A always wins
+      const [a, b] = Math.random() > 0.5 ? [players[i].id, players[i + 1].id] : [players[i + 1].id, players[i].id];
+      await enterMatch(a, b, framesA, framesB, weekEnding);
+    }
+    await closeWeek(weekEnding);
+  }
+
+  console.log(`Seeded season ${season.id} with ${players.length} players across ${weeks.length} closed weeks.`);
   console.log(`Admin login: ${email} / ${password}`);
 }
 
