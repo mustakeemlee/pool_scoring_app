@@ -1,0 +1,6 @@
+# Shell scripts must always check out with LF -- CRLF breaks the shebang
+# line (`#!/bin/sh` becomes an unrecognized interpreter path), which is
+# fatal for scripts Docker mounts straight into a Linux container (e.g.
+# docker/db-init/zz-set-role-passwords.sh). Without this, core.autocrlf=true
+# on Windows silently corrupts them on checkout.
+*.sh text eol=lf
