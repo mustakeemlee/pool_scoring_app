@@ -42,8 +42,9 @@ leaderboard ranks). Tear down with `-v` (see below) before re-seeding.
 
 ## Manual verification checklist
 
-- [ ] `docker compose --env-file .env.selfhost ps` shows all 5 services
-      (db, auth, rest, kong, frontend) as `Up`/`healthy`.
+- [ ] `docker compose --env-file .env.selfhost ps` shows all 9 services
+      (db, auth, rest, kong, frontend, fn-enter-match, fn-correct-match,
+      fn-close-week, fn-start-season) as `Up`/`healthy`.
 - [ ] http://localhost:8080/ shows the seeded leaderboard.
 - [ ] http://localhost:8080/players/<a-seeded-player-id> shows that player's
       profile.
