@@ -141,6 +141,7 @@ async function main() {
   }
 
   console.log(`Seeded season ${season.id} with ${players.length} players across ${weeks.length} closed weeks.`);
+  console.log(`Admin login: ${email} / ${password}`);
 }
 
 main().catch((error) => {
