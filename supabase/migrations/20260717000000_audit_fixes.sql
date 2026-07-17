@@ -63,16 +63,50 @@ grant select (id, full_name, joined_date, is_active, created_at, updated_at)
 -- a string-typed frame comparison store the losing player as the winner;
 -- this constraint is the database-level backstop so that class of bug
 -- can never silently corrupt data again, regardless of application code.
+--
+-- Added NOT VALID (post-review fix): a plain ADD CONSTRAINT validates
+-- every existing row as part of this migration's single transaction, so
+-- it would abort the ENTIRE migration -- including the players.email fix
+-- above -- if any historical match was already corrupted by the very bug
+-- this constraint exists to catch (a real possibility, since that bug was
+-- reproduced against this app's own data during the audit). NOT VALID
+-- attaches and enforces the constraint for all new writes immediately
+-- without scanning existing rows, decoupling "protect from now on"
+-- (guaranteed to succeed) from "retroactively prove old data is clean"
+-- (may legitimately fail and require manual remediation first). Before
+-- any real production cutover, run this manually and remediate any
+-- reported rows before it's expected to pass:
+--   alter table matches validate constraint matches_winner_matches_score;
 -- ---------------------------------------------------------------------
 alter table matches
   add constraint matches_winner_matches_score
-  check ((winner_id = player_a_id) = (frames_a > frames_b));
+  check ((winner_id = player_a_id) = (frames_a > frames_b))
+  not valid;
 
 -- ---------------------------------------------------------------------
 -- Important: enforce at most one active season at the database level,
 -- backstopping the start-season Edge Function fix (task 7) that
 -- completes any other active season before activating a new one.
+--
+-- Unlike a CHECK constraint, a unique index has no NOT VALID escape
+-- hatch -- CREATE UNIQUE INDEX always scans existing rows and always
+-- fails outright if a duplicate is already present, which would otherwise
+-- abort this whole migration with a generic "could not create unique
+-- index" error. The guard below turns that into a specific, actionable
+-- error naming the problem so an operator isn't left guessing.
 -- ---------------------------------------------------------------------
+do $$
+declare
+  active_count integer;
+begin
+  select count(*) into active_count from seasons where status = 'active';
+  if active_count > 1 then
+    raise exception
+      'audit_fixes migration: % seasons are already status=active; seasons_single_active_idx cannot be created until all but one is reconciled to another status (e.g. completed).',
+      active_count;
+  end if;
+end $$;
+
 create unique index seasons_single_active_idx on seasons (status) where status = 'active';
 
 -- ---------------------------------------------------------------------
@@ -81,16 +115,27 @@ create unique index seasons_single_active_idx on seasons (status) where status =
 -- Postgres `numeric` has no Infinity, only NaN, and NaN = NaN is TRUE for
 -- numeric (unlike IEEE float), so the standard "x <> x" NaN trick doesn't
 -- work here -- comparing against the literal 'NaN'::numeric does.
+--
+-- All five added NOT VALID for the same reason as matches_winner_matches_score
+-- above -- a legitimately-earned rating could already sit outside a
+-- newly-chosen "sane" range on a long-running instance, and that must not
+-- block the rest of this migration. Validate manually before a production
+-- cutover:
+--   alter table player_season_ratings validate constraint player_season_ratings_rating_sane;
+--   alter table player_season_ratings validate constraint player_season_ratings_rd_sane;
+--   alter table player_season_ratings validate constraint player_season_ratings_volatility_sane;
+--   alter table player_season_ratings validate constraint player_season_ratings_matches_played_sane;
+--   alter table player_season_ratings validate constraint player_season_ratings_season_points_sane;
 -- ---------------------------------------------------------------------
 alter table player_season_ratings
-  add constraint player_season_ratings_rating_sane check (rating <> 'NaN'::numeric and rating between -1000 and 5000),
-  add constraint player_season_ratings_rd_sane check (rd <> 'NaN'::numeric and rd > 0),
-  add constraint player_season_ratings_volatility_sane check (volatility <> 'NaN'::numeric and volatility > 0),
-  add constraint player_season_ratings_matches_played_sane check (matches_played >= 0),
-  add constraint player_season_ratings_season_points_sane check (season_points >= 0);
+  add constraint player_season_ratings_rating_sane check (rating <> 'NaN'::numeric and rating between -1000 and 5000) not valid,
+  add constraint player_season_ratings_rd_sane check (rd <> 'NaN'::numeric and rd > 0) not valid,
+  add constraint player_season_ratings_volatility_sane check (volatility <> 'NaN'::numeric and volatility > 0) not valid,
+  add constraint player_season_ratings_matches_played_sane check (matches_played >= 0) not valid,
+  add constraint player_season_ratings_season_points_sane check (season_points >= 0) not valid;
 
 alter table weekly_rankings
-  add constraint weekly_rankings_rank_sane check (rank >= 1);
+  add constraint weekly_rankings_rank_sane check (rank >= 1) not valid;
 
 -- ---------------------------------------------------------------------
 -- Minor: leaderboard_view / grade_distribution_view were owner-rights
