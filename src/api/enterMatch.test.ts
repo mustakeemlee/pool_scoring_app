@@ -125,4 +125,105 @@ describe('POST /functions/v1/enter-match', () => {
     const expectedAvgOpponentRating = (1500 + 1500 + 1471.875) / 3; // 1490.625
     expect(Number(statsA.rows[0].avg_opponent_rating)).toBeCloseTo(expectedAvgOpponentRating, 2);
   });
+
+  it('rejects a request with frames sent as strings instead of numbers, rather than silently miscomputing the winner', async () => {
+    const playerA = await createPlayer('Validation Player A');
+    const playerB = await createPlayer('Validation Player B');
+    const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        season_id: seasonId, match_date: '2026-01-09',
+        player_a_id: playerA, player_b_id: playerB,
+        frames_a: '2', frames_b: '10',
+      }),
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects equal frame counts', async () => {
+    const playerA = await createPlayer('Tie Player A');
+    const playerB = await createPlayer('Tie Player B');
+    const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        season_id: seasonId, match_date: '2026-01-09',
+        player_a_id: playerA, player_b_id: playerB,
+        frames_a: 4, frames_b: 4,
+      }),
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects a nonexistent player_id instead of silently creating a phantom rating row', async () => {
+    const playerA = await createPlayer('Phantom Check Player A');
+    const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        season_id: seasonId, match_date: '2026-01-09',
+        player_a_id: playerA, player_b_id: '00000000-0000-0000-0000-000000000000',
+        frames_a: 5, frames_b: 2,
+      }),
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it('returns the existing match instead of duplicating it when the identical request is retried', async () => {
+    const playerA = await createPlayer('Retry Player A');
+    const playerB = await createPlayer('Retry Player B');
+    const submit = () => fetch(`${status.API_URL}/functions/v1/enter-match`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        season_id: seasonId, match_date: '2026-01-10',
+        player_a_id: playerA, player_b_id: playerB,
+        frames_a: 5, frames_b: 3,
+      }),
+    });
+
+    const first = await submit();
+    expect(first.status).toBe(201);
+    const firstBody = await first.json();
+
+    const second = await submit();
+    expect(second.status).toBe(200);
+    const secondBody = await second.json();
+    expect(secondBody.match_id).toBe(firstBody.match_id);
+
+    const matchCount = await dbClient.query(
+      `select count(*)::int as count from matches where player_a_id = $1 and player_b_id = $2`,
+      [playerA, playerB],
+    );
+    expect(matchCount.rows[0].count).toBe(1);
+  });
+
+  it('does not lose a rating update when many matches for the same player are entered concurrently', async () => {
+    const anchor = await createPlayer('Concurrency Anchor');
+    const opponents = await Promise.all(
+      Array.from({ length: 6 }, (_, i) => createPlayer(`Concurrency Opponent ${i}`)),
+    );
+
+    const responses = await Promise.all(
+      opponents.map((opponentId, i) =>
+        fetch(`${status.API_URL}/functions/v1/enter-match`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            season_id: seasonId, match_date: '2026-01-11',
+            player_a_id: anchor, player_b_id: opponentId,
+            frames_a: 5, frames_b: 2 + (i % 2),
+          }),
+        }),
+      ),
+    );
+    expect(responses.every((r) => r.status === 201)).toBe(true);
+
+    const anchorRating = await dbClient.query(
+      `select matches_played from player_season_ratings where player_id = $1 and season_id = $2`,
+      [anchor, seasonId],
+    );
+    expect(anchorRating.rows[0].matches_played).toBe(opponents.length);
+  });
 });

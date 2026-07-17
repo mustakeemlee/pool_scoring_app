@@ -2,17 +2,14 @@
 import { createAuthedClient, createServiceRoleClient } from '../_shared/supabaseClients.ts';
 import { requireAdmin } from '../_shared/requireAdmin.ts';
 import { jsonResponse } from '../_shared/response.ts';
+import { withTransaction, type TransactionSql } from '../_shared/dbTransaction.ts';
+import { HttpError } from '../_shared/httpError.ts';
+import { isUuid, isValidFrameCount, isValidDateString } from '../_shared/validation.ts';
 import { applyInstantNudge } from '../_shared/rating/elo.ts';
 import { gradeForRating } from '../_shared/rating/grade.ts';
-import {
-  winPercentage,
-  currentStreak,
-  longestStreak,
-  averageOpponentRating,
-  formScore,
-} from '../_shared/rating/statistics.ts';
 import { calculateSeasonPoints } from '../_shared/rating/seasonPoints.ts';
 import { MIN_MATCHES_FOR_RANKING } from '../_shared/rating/constants.ts';
+import { recomputePlayerStatistics } from '../_shared/playerStatisticsRecompute.ts';
 
 interface EnterMatchBody {
   season_id: string;
@@ -23,130 +20,31 @@ interface EnterMatchBody {
   frames_b: number;
 }
 
-async function ensureRatingRow(db: ReturnType<typeof createServiceRoleClient>, playerId: string, seasonId: string) {
-  const { data: existing } = await db
-    .from('player_season_ratings')
-    .select('rating, rd, volatility, matches_played, season_points')
-    .eq('player_id', playerId)
-    .eq('season_id', seasonId)
-    .maybeSingle();
-
-  if (existing) return existing;
-
-  const { data: created, error } = await db
-    .from('player_season_ratings')
-    .insert({ player_id: playerId, season_id: seasonId })
-    .select('rating, rd, volatility, matches_played, season_points')
-    .single();
-  if (error) throw new Error(`Failed to create rating row: ${error.message}`);
-  return created;
+async function ensureRatingRow(sql: TransactionSql, playerId: string, seasonId: string) {
+  // ON CONFLICT DO UPDATE (a harmless self-assignment) both creates the row
+  // if missing AND takes a row lock if it already exists, held until this
+  // transaction commits/rolls back -- this closes the brand-new-player race
+  // (two concurrent first matches for the same new player) in the same
+  // statement that creates the row, rather than needing a separate lock step.
+  const [row] = await sql`
+    insert into player_season_ratings (player_id, season_id)
+    values (${playerId}, ${seasonId})
+    on conflict (player_id, season_id) do update set player_id = excluded.player_id
+    returning rating, rd, volatility, matches_played, season_points
+  `;
+  // postgres.js returns `numeric` columns as strings (to avoid float precision
+  // loss on arbitrary-precision values), not JS numbers -- but the rating
+  // engine (applyInstantNudge et al.) does real arithmetic on these fields,
+  // so they must be coerced here. `matches_played`/`season_points` are plain
+  // `integer` columns, which postgres.js already returns as JS numbers.
+  return {
+    rating: Number(row.rating),
+    rd: Number(row.rd),
+    volatility: Number(row.volatility),
+    matches_played: row.matches_played,
+    season_points: row.season_points,
+  };
 }
-
-Deno.serve(async (req: Request) => {
-  const authedClient = createAuthedClient(req);
-  const db = createServiceRoleClient();
-  const admin = await requireAdmin(authedClient, db);
-  if (!admin) return jsonResponse({ error: 'Unauthorized' }, 401);
-
-  const body = (await req.json()) as EnterMatchBody;
-  const { season_id, match_date, player_a_id, player_b_id, frames_a, frames_b } = body;
-
-  const ratingA = await ensureRatingRow(db, player_a_id, season_id);
-  const ratingB = await ensureRatingRow(db, player_b_id, season_id);
-
-  const winnerId = frames_a > frames_b ? player_a_id : player_b_id;
-
-  const { data: match, error: matchError } = await db
-    .from('matches')
-    .insert({
-      season_id,
-      match_date,
-      player_a_id,
-      player_b_id,
-      frames_a,
-      frames_b,
-      winner_id: winnerId,
-      entered_by: admin.id,
-    })
-    .select('id')
-    .single();
-  if (matchError) return jsonResponse({ error: matchError.message }, 400);
-
-  const nudge = applyInstantNudge({
-    ratingA: ratingA.rating,
-    rdA: ratingA.rd,
-    ratingB: ratingB.rating,
-    rdB: ratingB.rd,
-    framesA: frames_a,
-    framesB: frames_b,
-  });
-
-  const { error: ratingEventsError } = await db.from('rating_events').insert([
-    {
-      match_id: match.id,
-      player_id: player_a_id,
-      season_id,
-      rating_before: ratingA.rating,
-      rd_before: ratingA.rd,
-      rating_after: nudge.newRatingA,
-      rd_after: ratingA.rd,
-      expected_score: nudge.expectedScoreA,
-      actual_score: nudge.actualScoreA,
-      delta: nudge.deltaA,
-      event_type: 'instant',
-    },
-    {
-      match_id: match.id,
-      player_id: player_b_id,
-      season_id,
-      rating_before: ratingB.rating,
-      rd_before: ratingB.rd,
-      rating_after: nudge.newRatingB,
-      rd_after: ratingB.rd,
-      expected_score: 1 - nudge.expectedScoreA,
-      actual_score: 1 - nudge.actualScoreA,
-      delta: -nudge.deltaA,
-      event_type: 'instant',
-    },
-  ]);
-  if (ratingEventsError) return jsonResponse({ error: ratingEventsError.message }, 500);
-
-  const updateAResult = await updatePlayerAfterMatch(db, {
-    playerId: player_a_id,
-    seasonId: season_id,
-    newRating: nudge.newRatingA,
-    priorMatchesPlayed: ratingA.matches_played,
-    priorSeasonPoints: ratingA.season_points,
-    won: winnerId === player_a_id,
-    framesFor: frames_a,
-    framesAgainst: frames_b,
-    opponentRating: ratingB.rating,
-  });
-  if (updateAResult.error) return jsonResponse({ error: updateAResult.error }, 500);
-
-  const updateBResult = await updatePlayerAfterMatch(db, {
-    playerId: player_b_id,
-    seasonId: season_id,
-    newRating: nudge.newRatingB,
-    priorMatchesPlayed: ratingB.matches_played,
-    priorSeasonPoints: ratingB.season_points,
-    won: winnerId === player_b_id,
-    framesFor: frames_b,
-    framesAgainst: frames_a,
-    opponentRating: ratingA.rating,
-  });
-  if (updateBResult.error) return jsonResponse({ error: updateBResult.error }, 500);
-
-  const { error: auditLogError } = await db.from('match_audit_log').insert({
-    match_id: match.id,
-    changed_by: admin.id,
-    change_type: 'created',
-    new_values: body,
-  });
-  if (auditLogError) return jsonResponse({ error: auditLogError.message }, 500);
-
-  return jsonResponse({ match_id: match.id }, 201);
-});
 
 interface UpdatePlayerArgs {
   playerId: string;
@@ -160,10 +58,7 @@ interface UpdatePlayerArgs {
   opponentRating: number;
 }
 
-async function updatePlayerAfterMatch(
-  db: ReturnType<typeof createServiceRoleClient>,
-  args: UpdatePlayerArgs,
-): Promise<{ error: string | null }> {
+async function updatePlayerAfterMatch(sql: TransactionSql, args: UpdatePlayerArgs): Promise<void> {
   const matchesPlayed = args.priorMatchesPlayed + 1;
   const seasonPointsEarned = calculateSeasonPoints({
     won: args.won,
@@ -173,77 +68,135 @@ async function updatePlayerAfterMatch(
     opponentRating: args.opponentRating,
   });
 
-  const { error: ratingUpdateError } = await db
-    .from('player_season_ratings')
-    .update({
-      rating: args.newRating,
-      matches_played: matchesPlayed,
-      is_provisional: matchesPlayed < MIN_MATCHES_FOR_RANKING,
-      grade: gradeForRating(args.newRating),
-      season_points: args.priorSeasonPoints + seasonPointsEarned,
-    })
-    .eq('player_id', args.playerId)
-    .eq('season_id', args.seasonId);
-  if (ratingUpdateError) {
-    return { error: `Failed to update player_season_ratings: ${ratingUpdateError.message}` };
-  }
+  await sql`
+    update player_season_ratings
+    set rating = ${args.newRating},
+        matches_played = ${matchesPlayed},
+        is_provisional = ${matchesPlayed < MIN_MATCHES_FOR_RANKING},
+        grade = ${gradeForRating(args.newRating)},
+        season_points = ${args.priorSeasonPoints + seasonPointsEarned}
+    where player_id = ${args.playerId} and season_id = ${args.seasonId}
+  `;
 
-  const { data: pastMatches } = await db
-    .from('matches')
-    .select('id, winner_id, player_a_id, player_b_id, frames_a, frames_b, match_date')
-    .or(`player_a_id.eq.${args.playerId},player_b_id.eq.${args.playerId}`)
-    .eq('season_id', args.seasonId)
-    .eq('is_voided', false)
-    .order('match_date', { ascending: true });
-
-  const matches = pastMatches ?? [];
-  const outcomes = matches.map((m) => m.winner_id === args.playerId);
-  const wins = outcomes.filter(Boolean).length;
-  const losses = outcomes.length - wins;
-  const framesWon = matches.reduce(
-    (sum, m) => sum + (m.player_a_id === args.playerId ? m.frames_a : m.frames_b),
-    0,
-  );
-  const framesLost = matches.reduce(
-    (sum, m) => sum + (m.player_a_id === args.playerId ? m.frames_b : m.frames_a),
-    0,
-  );
-
-  // Opponent's rating AT THE TIME of each historical match: every match writes
-  // one 'instant' rating_events row per player, so the opponent's row for the
-  // same match_id carries their rating_before at that point in time.
-  const matchIds = matches.map((m) => m.id);
-  const { data: opponentEvents } = await db
-    .from('rating_events')
-    .select('match_id, player_id, rating_before')
-    .in('match_id', matchIds)
-    .eq('event_type', 'instant')
-    .neq('player_id', args.playerId);
-  const opponentRatingsAtMatchTime = (opponentEvents ?? []).map((e) => e.rating_before);
-
-  const last5 = outcomes.slice(-5);
-  const last10 = outcomes.slice(-10);
-
-  const { error: statsError } = await db.from('player_statistics').upsert(
-    {
-      player_id: args.playerId,
-      season_id: args.seasonId,
-      wins,
-      losses,
-      current_streak: currentStreak(outcomes),
-      longest_streak: longestStreak(outcomes),
-      frames_won: framesWon,
-      frames_lost: framesLost,
-      avg_opponent_rating: averageOpponentRating(opponentRatingsAtMatchTime),
-      form_5: winPercentage(last5.filter(Boolean).length, last5.length - last5.filter(Boolean).length),
-      form_10: winPercentage(last10.filter(Boolean).length, last10.length - last10.filter(Boolean).length),
-      form_score: formScore(last5, last10),
-    },
-    { onConflict: 'player_id,season_id' },
-  );
-  if (statsError) {
-    return { error: `Failed to upsert player_statistics: ${statsError.message}` };
-  }
-
-  return { error: null };
+  await recomputePlayerStatistics(sql, args.playerId, args.seasonId);
 }
+
+Deno.serve(async (req: Request) => {
+  const authedClient = createAuthedClient(req);
+  const db = createServiceRoleClient();
+  const admin = await requireAdmin(authedClient, db);
+  if (!admin) return jsonResponse({ error: 'Unauthorized' }, 401);
+
+  let body: EnterMatchBody;
+  try {
+    body = (await req.json()) as EnterMatchBody;
+  } catch {
+    return jsonResponse({ error: 'Request body must be valid JSON' }, 400);
+  }
+  const { season_id, match_date, player_a_id, player_b_id, frames_a, frames_b } = body;
+
+  if (!isUuid(season_id)) return jsonResponse({ error: 'season_id must be a valid UUID' }, 400);
+  if (!isUuid(player_a_id)) return jsonResponse({ error: 'player_a_id must be a valid UUID' }, 400);
+  if (!isUuid(player_b_id)) return jsonResponse({ error: 'player_b_id must be a valid UUID' }, 400);
+  if (player_a_id === player_b_id) {
+    return jsonResponse({ error: 'player_a_id and player_b_id must be different players' }, 400);
+  }
+  if (!isValidDateString(match_date)) {
+    return jsonResponse({ error: 'match_date must be a valid YYYY-MM-DD date' }, 400);
+  }
+  if (!isValidFrameCount(frames_a)) {
+    return jsonResponse({ error: 'frames_a must be an integer between 0 and 50' }, 400);
+  }
+  if (!isValidFrameCount(frames_b)) {
+    return jsonResponse({ error: 'frames_b must be an integer between 0 and 50' }, 400);
+  }
+  if (frames_a === frames_b) {
+    return jsonResponse({ error: 'frames_a and frames_b cannot be equal' }, 400);
+  }
+
+  try {
+    const result = await withTransaction(async (sql) => {
+      const [season] = await sql`select id from seasons where id = ${season_id}`;
+      if (!season) throw new HttpError(400, 'season_id does not reference an existing season');
+      const [playerA] = await sql`select id from players where id = ${player_a_id}`;
+      if (!playerA) throw new HttpError(400, 'player_a_id does not reference an existing player');
+      const [playerB] = await sql`select id from players where id = ${player_b_id}`;
+      if (!playerB) throw new HttpError(400, 'player_b_id does not reference an existing player');
+
+      // Soft idempotency: a byte-identical, non-voided match already
+      // recorded for this exact submission is returned as-is (200) rather
+      // than duplicated -- guards a lost-response network retry from
+      // double-counting the same real-world result.
+      const [existingMatch] = await sql`
+        select id from matches
+        where season_id = ${season_id} and match_date = ${match_date}
+          and player_a_id = ${player_a_id} and player_b_id = ${player_b_id}
+          and frames_a = ${frames_a} and frames_b = ${frames_b} and is_voided = false
+      `;
+      if (existingMatch) {
+        return { matchId: existingMatch.id as string, alreadyExisted: true };
+      }
+
+      // Lock both players' rating rows in a fixed (ascending id) order
+      // regardless of which request slot (A/B) each occupies, so two
+      // concurrent requests naming the same two players in opposite order
+      // can never deadlock against each other.
+      const [lowId, highId] = [player_a_id, player_b_id].sort();
+      const lowRow = await ensureRatingRow(sql, lowId, season_id);
+      const highRow = await ensureRatingRow(sql, highId, season_id);
+      const ratingA = player_a_id === lowId ? lowRow : highRow;
+      const ratingB = player_a_id === lowId ? highRow : lowRow;
+
+      const winnerId = frames_a > frames_b ? player_a_id : player_b_id;
+
+      const [match] = await sql`
+        insert into matches (season_id, match_date, player_a_id, player_b_id, frames_a, frames_b, winner_id, entered_by)
+        values (${season_id}, ${match_date}, ${player_a_id}, ${player_b_id}, ${frames_a}, ${frames_b}, ${winnerId}, ${admin.id})
+        returning id
+      `;
+
+      const nudge = applyInstantNudge({
+        ratingA: ratingA.rating,
+        rdA: ratingA.rd,
+        ratingB: ratingB.rating,
+        rdB: ratingB.rd,
+        framesA: frames_a,
+        framesB: frames_b,
+      });
+
+      await sql`
+        insert into rating_events (
+          match_id, player_id, season_id, rating_before, rd_before,
+          rating_after, rd_after, expected_score, actual_score, delta, event_type
+        ) values
+          (${match.id}, ${player_a_id}, ${season_id}, ${ratingA.rating}, ${ratingA.rd},
+           ${nudge.newRatingA}, ${ratingA.rd}, ${nudge.expectedScoreA}, ${nudge.actualScoreA}, ${nudge.deltaA}, 'instant'),
+          (${match.id}, ${player_b_id}, ${season_id}, ${ratingB.rating}, ${ratingB.rd},
+           ${nudge.newRatingB}, ${ratingB.rd}, ${1 - nudge.expectedScoreA}, ${1 - nudge.actualScoreA}, ${nudge.deltaB}, 'instant')
+      `;
+
+      await updatePlayerAfterMatch(sql, {
+        playerId: player_a_id, seasonId: season_id, newRating: nudge.newRatingA,
+        priorMatchesPlayed: ratingA.matches_played, priorSeasonPoints: ratingA.season_points,
+        won: winnerId === player_a_id, framesFor: frames_a, framesAgainst: frames_b, opponentRating: ratingB.rating,
+      });
+      await updatePlayerAfterMatch(sql, {
+        playerId: player_b_id, seasonId: season_id, newRating: nudge.newRatingB,
+        priorMatchesPlayed: ratingB.matches_played, priorSeasonPoints: ratingB.season_points,
+        won: winnerId === player_b_id, framesFor: frames_b, framesAgainst: frames_a, opponentRating: ratingA.rating,
+      });
+
+      await sql`
+        insert into match_audit_log (match_id, changed_by, change_type, new_values)
+        values (${match.id}, ${admin.id}, 'created', ${sql.json(body as unknown as Record<string, unknown>)})
+      `;
+
+      return { matchId: match.id as string, alreadyExisted: false };
+    });
+
+    return jsonResponse({ match_id: result.matchId }, result.alreadyExisted ? 200 : 201);
+  } catch (err) {
+    if (err instanceof HttpError) return jsonResponse({ error: err.message }, err.status);
+    return jsonResponse({ error: err instanceof Error ? err.message : 'Internal error' }, 500);
+  }
+});
