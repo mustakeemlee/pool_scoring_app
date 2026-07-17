@@ -28,6 +28,15 @@ Only the public read-only pages and admin login work here.
 4. Open http://localhost:8080 -- you should see the seeded players on the
    leaderboard, grade distribution, and match history pages.
 
+**Ports in use:** if `up` fails with a "port is already allocated" error for
+8080 or 8000, something else on your machine is already using that port --
+edit the left-hand side of the corresponding `ports:` mapping in
+`docker-compose.yml` (e.g. `"8081:80"`) and adjust the URLs above to match.
+
+**Re-seeding:** `scripts/seed-selfhost.mjs` always inserts new rows -- running
+it twice against the same stack duplicates the demo data (you'll see doubled
+leaderboard ranks). Tear down with `-v` (see below) before re-seeding.
+
 ## Manual verification checklist
 
 - [ ] `docker compose --env-file .env.selfhost ps` shows all 5 services

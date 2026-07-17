@@ -28,7 +28,10 @@ function signJwt(payload, secret) {
 }
 
 const jwtSecret = randomBytes(32).toString('base64');
-const postgresPassword = randomBytes(24).toString('base64');
+// base64url, not base64: this value is embedded directly in a postgresql://
+// connection URL (GOTRUE_DB_DATABASE_URL, PGRST_DB_URI) -- a raw base64
+// password can contain '/', which breaks URL parsing.
+const postgresPassword = base64url(randomBytes(24));
 const nowSeconds = Math.floor(Date.now() / 1000);
 const expSeconds = nowSeconds + 10 * 365 * 24 * 3600; // 10 years -- dev-grade, rotate before real hosting
 
