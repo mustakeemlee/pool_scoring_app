@@ -45,3 +45,39 @@ services:
           - /rest/v1/
     plugins:
       - name: cors
+  - name: functions-v1-enter-match
+    url: http://fn-enter-match:9000/
+    routes:
+      - name: functions-v1-enter-match-all
+        strip_path: true
+        paths:
+          - /functions/v1/enter-match
+    plugins:
+      - name: cors
+  - name: functions-v1-correct-match
+    url: http://fn-correct-match:9000/
+    routes:
+      - name: functions-v1-correct-match-all
+        strip_path: true
+        paths:
+          - /functions/v1/correct-match
+    plugins:
+      - name: cors
+  - name: functions-v1-close-week
+    url: http://fn-close-week:9000/
+    routes:
+      - name: functions-v1-close-week-all
+        strip_path: true
+        paths:
+          - /functions/v1/close-week
+    plugins:
+      - name: cors
+  - name: functions-v1-start-season
+    url: http://fn-start-season:9000/
+    routes:
+      - name: functions-v1-start-season-all
+        strip_path: true
+        paths:
+          - /functions/v1/start-season
+    plugins:
+      - name: cors

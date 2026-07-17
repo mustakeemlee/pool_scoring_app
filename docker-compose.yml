@@ -71,3 +71,55 @@ services:
         VITE_SUPABASE_ANON_KEY: ${ANON_KEY}
     ports:
       - "8080:80"
+
+  fn-enter-match:
+    image: public.ecr.aws/supabase/edge-runtime:v1.74.2
+    command: ["start", "--main-service", "/functions/enter-match", "--port", "9000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+    volumes:
+      - ./supabase/functions:/functions:ro
+
+  fn-correct-match:
+    image: public.ecr.aws/supabase/edge-runtime:v1.74.2
+    command: ["start", "--main-service", "/functions/correct-match", "--port", "9000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+    volumes:
+      - ./supabase/functions:/functions:ro
+
+  fn-close-week:
+    image: public.ecr.aws/supabase/edge-runtime:v1.74.2
+    command: ["start", "--main-service", "/functions/close-week", "--port", "9000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+    volumes:
+      - ./supabase/functions:/functions:ro
+
+  fn-start-season:
+    image: public.ecr.aws/supabase/edge-runtime:v1.74.2
+    command: ["start", "--main-service", "/functions/start-season", "--port", "9000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+    volumes:
+      - ./supabase/functions:/functions:ro
