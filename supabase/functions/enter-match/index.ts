@@ -123,20 +123,6 @@ Deno.serve(async (req: Request) => {
       const [playerB] = await sql`select id from players where id = ${player_b_id}`;
       if (!playerB) throw new HttpError(400, 'player_b_id does not reference an existing player');
 
-      // Soft idempotency: a byte-identical, non-voided match already
-      // recorded for this exact submission is returned as-is (200) rather
-      // than duplicated -- guards a lost-response network retry from
-      // double-counting the same real-world result.
-      const [existingMatch] = await sql`
-        select id from matches
-        where season_id = ${season_id} and match_date = ${match_date}
-          and player_a_id = ${player_a_id} and player_b_id = ${player_b_id}
-          and frames_a = ${frames_a} and frames_b = ${frames_b} and is_voided = false
-      `;
-      if (existingMatch) {
-        return { matchId: existingMatch.id as string, alreadyExisted: true };
-      }
-
       // Lock both players' rating rows in a fixed (ascending id) order
       // regardless of which request slot (A/B) each occupies, so two
       // concurrent requests naming the same two players in opposite order
@@ -146,6 +132,27 @@ Deno.serve(async (req: Request) => {
       const highRow = await ensureRatingRow(sql, highId, season_id);
       const ratingA = player_a_id === lowId ? lowRow : highRow;
       const ratingB = player_a_id === lowId ? highRow : lowRow;
+
+      // Soft idempotency: a byte-identical, non-voided match already
+      // recorded for this exact submission is returned as-is (200) rather
+      // than duplicated -- guards a lost-response network retry from
+      // double-counting the same real-world result. Deliberately checked
+      // AFTER the row locks above (not before): two genuinely-concurrent
+      // identical requests both take the same two locks, so the second one
+      // only proceeds past ensureRatingRow once the first has committed (or
+      // rolled back) -- by which point this SELECT will actually see the
+      // first request's committed match instead of racing it. Checking
+      // before the locks would let both requests pass the check
+      // simultaneously and insert two identical matches.
+      const [existingMatch] = await sql`
+        select id from matches
+        where season_id = ${season_id} and match_date = ${match_date}
+          and player_a_id = ${player_a_id} and player_b_id = ${player_b_id}
+          and frames_a = ${frames_a} and frames_b = ${frames_b} and is_voided = false
+      `;
+      if (existingMatch) {
+        return { matchId: existingMatch.id as string, alreadyExisted: true };
+      }
 
       const winnerId = frames_a > frames_b ? player_a_id : player_b_id;
 
