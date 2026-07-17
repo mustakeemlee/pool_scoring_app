@@ -5,6 +5,43 @@ This directory holds the pool-league ranking app's Supabase Edge Functions
 helpers under `_shared/`). This file covers local-dev quirks worth knowing
 before you spend time debugging something that isn't actually your code.
 
+## Direct Postgres access (transactions)
+
+Some Edge Functions need a real, multi-statement Postgres transaction (row
+locking plus atomic commit/rollback) instead of separate PostgREST calls via
+`db.from(...)` — see `withTransaction` in
+`supabase/functions/_shared/dbTransaction.ts`. This requires a
+`SUPABASE_DB_URL` env var to be visible to the function at runtime.
+
+**Locally, no extra configuration is needed.** `npx supabase functions serve`
+already injects `SUPABASE_DB_URL` automatically. This was confirmed
+empirically (not assumed): a temporary `console.log('DB_URL:',
+Deno.env.get('SUPABASE_DB_URL'))` added to the top of
+`supabase/functions/enter-match/index.ts`, with `npx supabase functions
+serve` restarted and the function hit once, printed a real connection
+string in the served function's logs:
+
+```
+postgresql://postgres:postgres@db:5432/postgres
+```
+
+Note this is **not** the same connection string `npx supabase status -o env`
+prints (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`, the one
+`src/api/testSupport.ts` and other host-side tooling use). The edge runtime
+container reaches Postgres over the internal Docker network at hostname
+`db`, port 5432 (Postgres's real port inside its own container), while the
+host machine reaches the same database via the mapped port
+`127.0.0.1:54322`. Both connection strings point at the same database —
+only the hostname/port differ depending on which side of the Docker network
+the caller is on. `withTransaction` simply reads whatever `SUPABASE_DB_URL`
+the environment provides, so no code needs to know or care which form it is.
+
+Because of this, **no `supabase/functions/.env` file exists or is needed**
+for local dev — `SUPABASE_DB_URL` arrives for free. If some future
+environment (e.g. a self-hosted docker-compose deployment) doesn't inject it
+automatically, that environment's function containers/config will need to
+set `SUPABASE_DB_URL` explicitly instead.
+
 ## Known issues / local dev
 
 ### OneDrive file-watcher flake (transient 502/503 right after boot/reload)
