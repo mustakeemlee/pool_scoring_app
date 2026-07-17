@@ -1,5 +1,5 @@
 // src/rating/glicko2.ts
-import { GLICKO2_SCALE, GLICKO2_TAU, GLICKO2_CONVERGENCE_EPSILON, RD_FLOOR, BASELINE_RATING } from './constants.ts';
+import { GLICKO2_SCALE, GLICKO2_TAU, GLICKO2_CONVERGENCE_EPSILON, RD_FLOOR, BASELINE_RATING, INITIAL_RD } from './constants.ts';
 
 export interface Glicko2PlayerState {
   rating: number;
@@ -80,7 +80,7 @@ export function reconcilePeriod(
   if (opponents.length === 0) {
     const phiStar = Math.sqrt(phi * phi + player.volatility * player.volatility);
     const { rd } = fromScale(mu, phiStar);
-    return { rating: player.rating, rd: Math.max(RD_FLOOR, rd), volatility: player.volatility };
+    return { rating: player.rating, rd: Math.min(INITIAL_RD, Math.max(RD_FLOOR, rd)), volatility: player.volatility };
   }
 
   let vInverseSum = 0;
@@ -103,5 +103,5 @@ export function reconcilePeriod(
   const newMu = mu + newPhi * newPhi * deltaSum;
 
   const { rating, rd } = fromScale(newMu, newPhi);
-  return { rating, rd: Math.max(RD_FLOOR, rd), volatility: newVolatility };
+  return { rating, rd: Math.min(INITIAL_RD, Math.max(RD_FLOOR, rd)), volatility: newVolatility };
 }

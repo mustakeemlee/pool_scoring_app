@@ -18,6 +18,6 @@ export function computeLeaderboard(
 ): RankedEntry[] {
   return players
     .filter((p) => p.matchesPlayed >= minMatches)
-    .sort((a, b) => b.rating - a.rating)
+    .sort((a, b) => b.rating - a.rating || b.matchesPlayed - a.matchesPlayed || a.playerId.localeCompare(b.playerId))
     .map((p, index) => ({ playerId: p.playerId, rating: p.rating, rank: index + 1 }));
 }

@@ -53,4 +53,12 @@ describe('reconcilePeriod', () => {
     ]);
     expect(result.rd).toBeGreaterThanOrEqual(50);
   });
+
+  it('never lets rd exceed INITIAL_RD even after many idle periods', () => {
+    let state = { rating: 1500, rd: 100, volatility: 0.06 };
+    for (let i = 0; i < 100; i++) {
+      state = reconcilePeriod(state, []);
+    }
+    expect(state.rd).toBeLessThanOrEqual(350);
+  });
 });

@@ -79,4 +79,28 @@ describe('applyInstantNudge', () => {
     });
     expect(result.actualScoreA).toBe(0);
   });
+
+  it('produces the same rating change for a player regardless of whether they are entered as A or B', () => {
+    const newPlayerWinsAsA = applyInstantNudge({
+      ratingA: 1500, rdA: 350, ratingB: 1500, rdB: 50, framesA: 5, framesB: 4,
+    });
+    const newPlayerWinsAsB = applyInstantNudge({
+      ratingA: 1500, rdA: 50, ratingB: 1500, rdB: 350, framesA: 4, framesB: 5,
+    });
+    // The new player (rd 350) wins 5-4 in both calls, just entered in a
+    // different column. Their resulting rating must not depend on that.
+    expect(newPlayerWinsAsA.newRatingA).toBeCloseTo(newPlayerWinsAsB.newRatingB, 10);
+  });
+
+  it('throws when framesA equals framesB', () => {
+    expect(() =>
+      applyInstantNudge({ ratingA: 1500, rdA: 350, ratingB: 1500, rdB: 350, framesA: 5, framesB: 5 }),
+    ).toThrow(/cannot be equal/);
+  });
+
+  it('throws when a frame count is negative', () => {
+    expect(() =>
+      applyInstantNudge({ ratingA: 1500, rdA: 350, ratingB: 1500, rdB: 350, framesA: -1, framesB: 5 }),
+    ).toThrow(/cannot be negative/);
+  });
 });

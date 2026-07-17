@@ -38,4 +38,14 @@ describe('computeLeaderboard', () => {
     const players = [{ playerId: 'a', rating: 2000, matchesPlayed: 0 }];
     expect(computeLeaderboard(players)).toEqual([]);
   });
+
+  it('breaks ties deterministically instead of relying on input order', () => {
+    const players = [
+      { playerId: 'zzz', rating: 1600, matchesPlayed: 5 },
+      { playerId: 'aaa', rating: 1600, matchesPlayed: 5 },
+    ];
+    const ranked = computeLeaderboard(players, 0);
+    expect(ranked[0].playerId).toBe('aaa');
+    expect(ranked[1].playerId).toBe('zzz');
+  });
 });
