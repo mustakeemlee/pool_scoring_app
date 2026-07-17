@@ -104,9 +104,21 @@
   }
 
   export function isValidDateString(value: unknown): value is string {
-    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value));
+    if (typeof value !== 'string') return false;
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) return false;
+    // Date.parse silently rolls an out-of-range day into the next month
+    // (e.g. 2026-02-30 -> 2026-03-02) instead of rejecting it. Reconstruct
+    // from the parsed parts and check it round-trips exactly.
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
   }
   ```
+
+  **(Post-review fix: the plan originally used `!Number.isNaN(Date.parse(value))`, which silently accepts non-existent calendar dates like `2026-02-30` due to JS's day-of-month rollover. The code above is the corrected version, already applied to `supabase/functions/_shared/validation.ts` — Tasks 4-7 should treat this corrected version as authoritative.)**
 
 - [ ] **Step 5: Verify with a throwaway smoke test**
 
