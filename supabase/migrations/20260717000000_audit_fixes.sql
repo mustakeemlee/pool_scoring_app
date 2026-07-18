@@ -73,9 +73,18 @@ grant select (id, full_name, joined_date, is_active, created_at, updated_at)
 -- attaches and enforces the constraint for all new writes immediately
 -- without scanning existing rows, decoupling "protect from now on"
 -- (guaranteed to succeed) from "retroactively prove old data is clean"
--- (may legitimately fail and require manual remediation first). Before
--- any real production cutover, run this manually and remediate any
--- reported rows before it's expected to pass:
+-- (may legitimately fail and require manual remediation first).
+--
+-- IMPORTANT: NOT VALID does not mean "unenforced" -- Postgres re-checks a
+-- NOT VALID constraint on every UPDATE of the row afterwards, even when
+-- the constrained columns aren't the ones being changed. So a legacy row
+-- that already violates this constraint will make ANY future UPDATE
+-- touching it fail at runtime (e.g. close-week's `is_period_closed`
+-- update, correct-match's `is_voided` update, or the new updated_at
+-- trigger below) -- not just the deferred VALIDATE CONSTRAINT step. This
+-- is why remediation must happen BEFORE any real production cutover
+-- points live app traffic at existing data, not "whenever convenient
+-- afterward": run this, and fix every row it reports, first --
 --   alter table matches validate constraint matches_winner_matches_score;
 -- ---------------------------------------------------------------------
 alter table matches
@@ -119,8 +128,10 @@ create unique index seasons_single_active_idx on seasons (status) where status =
 -- All five added NOT VALID for the same reason as matches_winner_matches_score
 -- above -- a legitimately-earned rating could already sit outside a
 -- newly-chosen "sane" range on a long-running instance, and that must not
--- block the rest of this migration. Validate manually before a production
--- cutover:
+-- block the rest of this migration. As with that constraint, NOT VALID
+-- does not mean unenforced: any future UPDATE of an already-violating row
+-- fails immediately, not just the VALIDATE step below -- so remediate
+-- BEFORE pointing production traffic at existing data:
 --   alter table player_season_ratings validate constraint player_season_ratings_rating_sane;
 --   alter table player_season_ratings validate constraint player_season_ratings_rd_sane;
 --   alter table player_season_ratings validate constraint player_season_ratings_volatility_sane;

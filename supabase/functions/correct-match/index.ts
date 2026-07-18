@@ -181,8 +181,8 @@ async function replayOpenWeek(sql: TransactionSql, seasonId: string, playerId: s
   const rating = baseline.rating;
   const rd = baseline.rd;
 
-  // KNOWN LIMITATION (documented, not fixed — see task-8 review finding 1):
-  // chronological order here is match_date, then created_at as a tiebreaker.
+  // KNOWN LIMITATION (documented, not fixed): chronological order here is
+  // match_date, then created_at as a tiebreaker.
   // The corrected match is a freshly-inserted row, so its created_at is
   // always "now" — later than any other same-day match that existed before
   // this correction. If a player has multiple matches on the same
@@ -265,8 +265,8 @@ async function replayOpenWeek(sql: TransactionSql, seasonId: string, playerId: s
   for (const match of openMatches) {
     const isPlayerA = match.player_a_id === playerId;
     const opponentId = isPlayerA ? match.player_b_id : match.player_a_id;
-    // KNOWN LIMITATION (documented, not fixed — see task-8 review finding 2):
-    // this reads the opponent's LIVE current rating from
+    // KNOWN LIMITATION (documented, not fixed): this reads the opponent's
+    // LIVE current rating from
     // player_season_ratings, not their rating at the specific point in time
     // this match is being replayed. If the opponent also played other
     // matches later in the same open week, their current rating already

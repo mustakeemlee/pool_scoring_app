@@ -101,9 +101,9 @@ describe('POST /functions/v1/close-week', () => {
   });
 
   it('reconciles every player against opponents\' PRE-period ratings, not opponents\' live-updated mid-loop ratings (opponent-snapshot contamination regression test)', async () => {
-    // Regression test for a real bug found & fixed during Task 9's implementation
-    // (see .superpowers/sdd/task-9-report.md, Deviation 1): the reconciliation loop
-    // in close-week/index.ts must read every opponent's rating/rd from a single
+    // Regression test for a real bug found & fixed in close-week's original
+    // implementation: the reconciliation loop in close-week/index.ts must
+    // read every opponent's rating/rd from a single
     // frozen pre-period snapshot fetched before the loop starts, not live from
     // player_season_ratings mid-loop while that same loop is writing reconciled
     // results back to that table. A 2-player/1-match scenario (see the first test
