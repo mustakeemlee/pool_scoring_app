@@ -2,9 +2,13 @@
 import { createAuthedClient, createServiceRoleClient } from '../_shared/supabaseClients.ts';
 import { requireAdmin } from '../_shared/requireAdmin.ts';
 import { jsonResponse } from '../_shared/response.ts';
+import { withTransaction, type TransactionSql } from '../_shared/dbTransaction.ts';
+import { HttpError } from '../_shared/httpError.ts';
+import { isUuid, isValidDateString } from '../_shared/validation.ts';
 import { reconcilePeriod, type Glicko2Opponent } from '../_shared/rating/glicko2.ts';
 import { computeLeaderboard } from '../_shared/rating/ranking.ts';
 import { gradeForRating } from '../_shared/rating/grade.ts';
+import { getPriorPeriodBaseline } from '../_shared/priorPeriodBaseline.ts';
 
 interface CloseWeekBody {
   season_id: string;
@@ -17,189 +21,223 @@ Deno.serve(async (req: Request) => {
   const admin = await requireAdmin(authedClient, db);
   if (!admin) return jsonResponse({ error: 'Unauthorized' }, 401);
 
-  const { season_id, week_ending } = (await req.json()) as CloseWeekBody;
+  let body: CloseWeekBody;
+  try {
+    body = (await req.json()) as CloseWeekBody;
+  } catch {
+    return jsonResponse({ error: 'Request body must be valid JSON' }, 400);
+  }
+  const { season_id, week_ending } = body;
 
-  const { data: openMatches, error: openMatchesError } = await db
-    .from('matches')
-    .select('id, player_a_id, player_b_id, winner_id')
-    .eq('season_id', season_id)
-    .eq('is_period_closed', false)
-    .eq('is_voided', false)
-    .lte('match_date', week_ending);
-  if (openMatchesError) {
-    return jsonResponse({ error: `Failed to load open matches: ${openMatchesError.message}` }, 500);
+  // Pure-format validation before opening the transaction (matches enter-match):
+  // a malformed season_id/week_ending can never reach any DB work.
+  if (!isUuid(season_id)) return jsonResponse({ error: 'season_id must be a valid UUID' }, 400);
+  if (!isValidDateString(week_ending)) {
+    return jsonResponse({ error: 'week_ending must be a valid YYYY-MM-DD date' }, 400);
   }
 
-  const matches = openMatches ?? [];
-  const playerIds = Array.from(
-    new Set(matches.flatMap((m) => [m.player_a_id, m.player_b_id])),
-  );
+  try {
+    const result = await withTransaction(async (sql: TransactionSql) => {
+      // Load the season and reject a week_ending that predates the season's
+      // start_date: closing a "week" before the season even began would write
+      // a bogus historical weekly_rankings snapshot for a period that never
+      // existed (a finding reproduced during the audit). start_date is a
+      // `date` column; to_char pins it to a 'YYYY-MM-DD' string so comparing
+      // it against the already-format-validated ISO week_ending is a plain
+      // lexical (== chronological, for zero-padded ISO dates) string compare.
+      const [season] = await sql`
+        select id, to_char(start_date, 'YYYY-MM-DD') as start_date
+        from seasons where id = ${season_id}
+      `;
+      if (!season) throw new HttpError(400, 'season_id does not reference an existing season');
+      if (week_ending < (season.start_date as string)) {
+        throw new HttpError(400, 'week_ending cannot be before the season start_date');
+      }
 
-  // Snapshot every involved player's PRE-period rating/rd/volatility up
-  // front, before any writes happen this run. Glicko-2 batch reconciliation
-  // assumes every player in the period is evaluated against opponents'
-  // *pre-period* state simultaneously. If opponent state were instead read
-  // live/per-iteration from player_season_ratings while this same loop is
-  // also writing reconciled results back to that table (the brief's
-  // original ordering), a player processed earlier in playerIds would
-  // contaminate the opponent input used for anyone processed later who
-  // played them this period - silently corrupting the math for any pair
-  // that both closed out in the same close-week call. Reading opponents
-  // only from this frozen snapshot for the rest of the function avoids that
-  // regardless of iteration/write order.
-  let snapshotRows: { player_id: string; rating: number; rd: number; volatility: number }[] = [];
-  if (playerIds.length > 0) {
-    const { data: snapshot, error: snapshotError } = await db
-      .from('player_season_ratings')
-      .select('player_id, rating, rd, volatility')
-      .eq('season_id', season_id)
-      .in('player_id', playerIds);
-    if (snapshotError) {
-      return jsonResponse({ error: `Failed to load pre-period ratings: ${snapshotError.message}` }, 500);
-    }
-    snapshotRows = snapshot ?? [];
-  }
-  const preRatings = new Map(snapshotRows.map((r) => [r.player_id, r]));
+      const matches = await sql`
+        select id, player_a_id, player_b_id, winner_id from matches
+        where season_id = ${season_id}
+          and is_period_closed = false
+          and is_voided = false
+          and match_date <= ${week_ending}
+      `;
 
-  for (const playerId of playerIds) {
-    const ratingRow = preRatings.get(playerId);
-    if (!ratingRow) continue;
+      const playerIds = Array.from(
+        new Set(matches.flatMap((m) => [m.player_a_id as string, m.player_b_id as string])),
+      );
 
-    const opponents: Glicko2Opponent[] = [];
-    for (const match of matches) {
-      if (match.player_a_id !== playerId && match.player_b_id !== playerId) continue;
-      const opponentId = match.player_a_id === playerId ? match.player_b_id : match.player_a_id;
-      const opponentRating = preRatings.get(opponentId);
-      if (!opponentRating) continue;
-      opponents.push({
-        rating: opponentRating.rating,
-        rd: opponentRating.rd,
-        score: (match.winner_id === playerId ? 1 : 0) as 0 | 1,
-      });
-    }
+      // Lock every involved player's rating row up front, in ascending id
+      // order, BEFORE reading the pre-period snapshot below. Two concurrent
+      // close-week calls whose open-match sweeps overlap on any player would
+      // otherwise each read the same pre-period baseline and reconcile on top
+      // of it, double-reconciling that player for the period. Taking the locks
+      // in a fixed (sorted) order also stops two such calls from deadlocking
+      // when their player sets intersect in a different order. ON CONFLICT DO
+      // UPDATE on a harmless self-assignment both guarantees the row exists and
+      // takes the row lock (held until commit/rollback), mirroring the pattern
+      // in enter-match/correct-match.
+      const lockOrderedPlayerIds = [...playerIds].sort();
+      for (const playerId of lockOrderedPlayerIds) {
+        await sql`
+          insert into player_season_ratings (player_id, season_id)
+          values (${playerId}, ${season_id})
+          on conflict (player_id, season_id) do update set player_id = excluded.player_id
+        `;
+      }
 
-    const reconciled = reconcilePeriod(
-      { rating: ratingRow.rating, rd: ratingRow.rd, volatility: ratingRow.volatility },
-      opponents,
-    );
+      // Snapshot every involved player's PRE-period rating/rd/volatility up
+      // front, before any writes happen this run. Glicko-2 batch reconciliation
+      // assumes every player in the period is evaluated against opponents'
+      // *pre-period* state simultaneously. If opponent state were instead read
+      // live/per-iteration from player_season_ratings while this same loop is
+      // also writing reconciled results back to that table (the brief's
+      // original ordering), a player processed earlier in playerIds would
+      // contaminate the opponent input used for anyone processed later who
+      // played them this period - silently corrupting the math for any pair
+      // that both closed out in the same close-week call. Reading opponents
+      // only from this frozen snapshot for the rest of the function avoids that
+      // regardless of iteration/write order.
+      //
+      // CRITICAL FIX (the audit's headline close-week bug): the baseline is the
+      // player's rating/rd/volatility as of their last formally closed period
+      // (getPriorPeriodBaseline: the most recent weekly_reconciliation /
+      // season_carryover event, or the season's starting defaults if none) --
+      // NOT the live player_season_ratings row. The live row already includes
+      // this open period's instant Elo nudges, so reconciling from it (what the
+      // old code did by reading player_season_ratings directly) counted every
+      // week's results twice: once via the instant nudge at enter-match time,
+      // then again when Glicko-2 reconciled on top of the already-nudged rating.
+      const preRatings = new Map<string, { rating: number; rd: number; volatility: number }>();
+      for (const playerId of playerIds) {
+        preRatings.set(playerId, await getPriorPeriodBaseline(sql, playerId, season_id));
+      }
 
-    const { error: ratingEventError } = await db.from('rating_events').insert({
-      player_id: playerId,
-      season_id,
-      rating_before: ratingRow.rating,
-      rd_before: ratingRow.rd,
-      volatility_before: ratingRow.volatility,
-      rating_after: reconciled.rating,
-      rd_after: reconciled.rd,
-      volatility_after: reconciled.volatility,
-      delta: reconciled.rating - ratingRow.rating,
-      event_type: 'weekly_reconciliation',
-      period_end_date: week_ending,
+      for (const playerId of playerIds) {
+        const ratingRow = preRatings.get(playerId);
+        if (!ratingRow) continue;
+
+        const opponents: Glicko2Opponent[] = [];
+        for (const match of matches) {
+          if (match.player_a_id !== playerId && match.player_b_id !== playerId) continue;
+          const opponentId = match.player_a_id === playerId ? match.player_b_id : match.player_a_id;
+          const opponentRating = preRatings.get(opponentId as string);
+          if (!opponentRating) continue;
+          opponents.push({
+            rating: opponentRating.rating,
+            rd: opponentRating.rd,
+            score: (match.winner_id === playerId ? 1 : 0) as 0 | 1,
+          });
+        }
+
+        const reconciled = reconcilePeriod(
+          { rating: ratingRow.rating, rd: ratingRow.rd, volatility: ratingRow.volatility },
+          opponents,
+        );
+
+        await sql`
+          insert into rating_events (
+            player_id, season_id, rating_before, rd_before, volatility_before,
+            rating_after, rd_after, volatility_after, delta, event_type, period_end_date
+          ) values (
+            ${playerId}, ${season_id}, ${ratingRow.rating}, ${ratingRow.rd}, ${ratingRow.volatility},
+            ${reconciled.rating}, ${reconciled.rd}, ${reconciled.volatility},
+            ${reconciled.rating - ratingRow.rating}, 'weekly_reconciliation', ${week_ending}
+          )
+        `;
+
+        await sql`
+          update player_season_ratings
+          set rating = ${reconciled.rating},
+              rd = ${reconciled.rd},
+              volatility = ${reconciled.volatility},
+              grade = ${gradeForRating(reconciled.rating)}
+          where player_id = ${playerId} and season_id = ${season_id}
+        `;
+      }
+
+      const allRatings = await sql`
+        select player_id, rating, rd, volatility, matches_played, grade, season_points
+        from player_season_ratings
+        where season_id = ${season_id}
+      `;
+
+      // weekly_rankings is meant as a full historical snapshot of every player
+      // carrying a rating this season, not just players who currently clear the
+      // MIN_MATCHES_FOR_RANKING eligibility bar that gates the *live*
+      // leaderboard_view (design spec sec 6) - so rank every player who has a
+      // player_season_ratings row this season, overriding
+      // computeLeaderboard's default minMatches filter with 0.
+      const leaderboard = computeLeaderboard(
+        allRatings.map((r) => ({
+          playerId: r.player_id as string,
+          // rating is a `numeric` column -> string from postgres.js; coerce
+          // before it reaches computeLeaderboard's rating comparisons.
+          rating: Number(r.rating),
+          matchesPlayed: r.matches_played as number,
+        })),
+        0,
+      );
+
+      for (const entry of leaderboard) {
+        const row = allRatings.find((r) => r.player_id === entry.playerId);
+        if (!row) continue;
+        const [stats] = await sql`
+          select wins, losses, form_score from player_statistics
+          where player_id = ${entry.playerId} and season_id = ${season_id}
+        `;
+
+        // wins/losses are `integer` columns (postgres.js already returns those
+        // as JS numbers), but coerce defensively so the win_pct arithmetic can
+        // never silently become string concatenation.
+        const wins = stats ? Number(stats.wins) : 0;
+        const losses = stats ? Number(stats.losses) : 0;
+
+        // Upsert rather than a plain insert: close-week can legitimately run
+        // again for the same (season_id, week_ending) pair later - e.g. an
+        // admin closes out a second batch of matches under the same
+        // week_ending - and weekly_rankings has a (season_id, week_ending,
+        // player_id) unique constraint. A plain insert would hit a duplicate
+        // key error (and fail the whole request) for every player who already
+        // has a row for this week, even though nothing about their own
+        // reconciliation changed this call. Upserting keeps every player's
+        // snapshot in sync with the latest leaderboard/rank numbers instead of
+        // erroring out.
+        await sql`
+          insert into weekly_rankings (
+            season_id, week_ending, player_id, rating, rd, volatility, rank, grade,
+            win_pct, form_score, season_points
+          ) values (
+            ${season_id}, ${week_ending}, ${entry.playerId}, ${entry.rating}, ${Number(row.rd)},
+            ${Number(row.volatility)}, ${entry.rank}, ${row.grade as string},
+            ${stats ? (wins / Math.max(1, wins + losses)) * 100 : 0},
+            ${stats ? Number(stats.form_score ?? 0) : 0},
+            ${row.season_points as number}
+          )
+          on conflict (season_id, week_ending, player_id) do update set
+            rating = excluded.rating,
+            rd = excluded.rd,
+            volatility = excluded.volatility,
+            rank = excluded.rank,
+            grade = excluded.grade,
+            win_pct = excluded.win_pct,
+            form_score = excluded.form_score,
+            season_points = excluded.season_points
+        `;
+      }
+
+      if (matches.length > 0) {
+        await sql`
+          update matches set is_period_closed = true
+          where id in ${sql(matches.map((m) => m.id as string))}
+        `;
+      }
+
+      return { closed_matches: matches.length, players_reconciled: playerIds.length };
     });
-    if (ratingEventError) {
-      return jsonResponse(
-        { error: `Failed to insert weekly_reconciliation rating_events for player ${playerId}: ${ratingEventError.message}` },
-        500,
-      );
-    }
 
-    const { error: ratingUpdateError } = await db
-      .from('player_season_ratings')
-      .update({
-        rating: reconciled.rating,
-        rd: reconciled.rd,
-        volatility: reconciled.volatility,
-        grade: gradeForRating(reconciled.rating),
-      })
-      .eq('player_id', playerId)
-      .eq('season_id', season_id);
-    if (ratingUpdateError) {
-      return jsonResponse(
-        { error: `Failed to update player_season_ratings for player ${playerId}: ${ratingUpdateError.message}` },
-        500,
-      );
-    }
+    return jsonResponse(result, 200);
+  } catch (err) {
+    if (err instanceof HttpError) return jsonResponse({ error: err.message }, err.status);
+    return jsonResponse({ error: err instanceof Error ? err.message : 'Internal error' }, 500);
   }
-
-  const { data: allRatings, error: allRatingsError } = await db
-    .from('player_season_ratings')
-    .select('player_id, rating, rd, volatility, matches_played, grade, season_points')
-    .eq('season_id', season_id);
-  if (allRatingsError) {
-    return jsonResponse({ error: `Failed to load season ratings for leaderboard: ${allRatingsError.message}` }, 500);
-  }
-
-  // weekly_rankings is meant as a full historical snapshot of every player
-  // carrying a rating this season, not just players who currently clear the
-  // MIN_MATCHES_FOR_RANKING eligibility bar that gates the *live*
-  // leaderboard_view (design spec sec 6) - so rank every player who has a
-  // player_season_ratings row this season, overriding
-  // computeLeaderboard's default minMatches filter with 0.
-  const leaderboard = computeLeaderboard(
-    (allRatings ?? []).map((r) => ({
-      playerId: r.player_id,
-      rating: r.rating,
-      matchesPlayed: r.matches_played,
-    })),
-    0,
-  );
-
-  for (const entry of leaderboard) {
-    const row = (allRatings ?? []).find((r) => r.player_id === entry.playerId);
-    if (!row) continue;
-    const { data: stats } = await db
-      .from('player_statistics')
-      .select('wins, losses, form_score')
-      .eq('player_id', entry.playerId)
-      .eq('season_id', season_id)
-      .maybeSingle();
-
-    // Upsert rather than a plain insert: close-week can legitimately run
-    // again for the same (season_id, week_ending) pair later - e.g. an
-    // admin closes out a second batch of matches under the same
-    // week_ending - and weekly_rankings has a (season_id, week_ending,
-    // player_id) unique constraint. A plain insert would hit a duplicate
-    // key error (and, with the error handling below, fail the whole
-    // request) for every player who already has a row for this week, even
-    // though nothing about their own reconciliation changed this call.
-    // Upserting keeps every player's snapshot in sync with the latest
-    // leaderboard/rank numbers instead of erroring out.
-    const { error: rankingError } = await db.from('weekly_rankings').upsert(
-      {
-        season_id,
-        week_ending,
-        player_id: entry.playerId,
-        rating: entry.rating,
-        rd: row.rd,
-        volatility: row.volatility,
-        rank: entry.rank,
-        grade: row.grade,
-        win_pct: stats ? (stats.wins / Math.max(1, stats.wins + stats.losses)) * 100 : 0,
-        form_score: stats?.form_score ?? 0,
-        season_points: row.season_points,
-      },
-      { onConflict: 'season_id,week_ending,player_id' },
-    );
-    if (rankingError) {
-      return jsonResponse(
-        { error: `Failed to write weekly_rankings for player ${entry.playerId}: ${rankingError.message}` },
-        500,
-      );
-    }
-  }
-
-  if (matches.length > 0) {
-    const { error: closeError } = await db
-      .from('matches')
-      .update({ is_period_closed: true })
-      .in(
-        'id',
-        matches.map((m) => m.id),
-      );
-    if (closeError) {
-      return jsonResponse({ error: `Failed to lock closed matches: ${closeError.message}` }, 500);
-    }
-  }
-
-  return jsonResponse({ closed_matches: matches.length, players_reconciled: playerIds.length }, 200);
 });

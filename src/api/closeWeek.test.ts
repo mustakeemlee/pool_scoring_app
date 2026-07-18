@@ -3,6 +3,7 @@ import { beforeAll, describe, it, expect } from 'vitest';
 import { Client } from 'pg';
 import { getSupabaseStatus, provisionTestAdmin, type SupabaseStatus } from './testSupport';
 import { reconcilePeriod } from '../rating/glicko2';
+import { BASELINE_RATING, INITIAL_RD, INITIAL_VOLATILITY } from '../rating/constants';
 
 let status: SupabaseStatus;
 let accessToken: string;
@@ -24,6 +25,11 @@ async function enterMatch(playerA: string, playerB: string, framesA: number, fra
   });
   const body = await response.json();
   return body.match_id as string;
+}
+
+async function createPlayer(name: string): Promise<string> {
+  const result = await dbClient.query(`insert into players (full_name) values ($1) returning id`, [name]);
+  return result.rows[0].id;
 }
 
 beforeAll(async () => {
@@ -116,21 +122,18 @@ describe('POST /functions/v1/close-week', () => {
     await enterMatch(p2, p1, 5, 2); // P2 beats P1
     await enterMatch(p2, p3, 5, 3); // P2 beats P3
 
-    // Capture each player's PRE-close-week state (post enter-match instant nudge,
-    // pre-Glicko-2 batch reconciliation) - this is exactly the frozen snapshot
-    // close-week's own pre-period query is supposed to read.
-    async function preState(playerId: string) {
-      const row = (
-        await dbClient.query(
-          `select rating, rd, volatility from player_season_ratings where player_id = $1 and season_id = $2`,
-          [playerId, seasonId],
-        )
-      ).rows[0];
-      return { rating: Number(row.rating), rd: Number(row.rd), volatility: Number(row.volatility) };
-    }
-    const p1Pre = await preState(p1);
-    const p2Pre = await preState(p2);
-    const p3Pre = await preState(p3);
+    // After the double-counting fix, close-week reconciles every player from
+    // their TRUE pre-period baseline (getPriorPeriodBaseline: their most recent
+    // weekly_reconciliation / season_carryover event, or the season's starting
+    // defaults when no period has ever been closed for them) - NOT the live,
+    // already-instant-nudged rating in player_season_ratings. P1/P2/P3 are all
+    // fresh this season with no prior closed period, so every one of them shares
+    // the same season-default baseline. The opponent-snapshot-freshness property
+    // this test guards is unchanged: opponents are read from a single frozen
+    // snapshot taken before the reconciliation loop, so P3 must still see P2's
+    // PRE-reconciliation (here: baseline) rating, never P2's rating after
+    // close-week's loop has already reconciled it within this same run.
+    const baseline = { rating: BASELINE_RATING, rd: INITIAL_RD, volatility: INITIAL_VOLATILITY };
 
     const response = await fetch(`${status.API_URL}/functions/v1/close-week`, {
       method: 'POST',
@@ -139,22 +142,23 @@ describe('POST /functions/v1/close-week', () => {
     });
     expect(response.status).toBe(200);
 
-    // "Correct" hypothesis: P3 reconciled against P2's PRE-period rating/rd
-    // (P3 lost to P2, so score is 0 from P3's perspective).
-    const correct = reconcilePeriod(p3Pre, [{ rating: p2Pre.rating, rd: p2Pre.rd, score: 0 }]);
+    // "Correct" hypothesis: P3 reconciled against P2's pre-period (baseline)
+    // rating/rd (P3 lost to P2, so score is 0 from P3's perspective).
+    const correct = reconcilePeriod(baseline, [{ rating: baseline.rating, rd: baseline.rd, score: 0 }]);
 
     // "Contaminated" hypothesis, included only to make the test's intent
     // self-documenting (the tight-tolerance assertion against `correct` below is
     // what actually catches a regression). This is what P3's result would be if
     // the implementation instead read P2's POST-reconciliation rating live
     // mid-loop - the exact bug this test guards against. P2's own reconciliation
-    // uses its pre-period state against both of ITS opponents' (P1, P3) pre-period
-    // ratings (P2 beat both, so score 1 from P2's perspective both times).
-    const p2Reconciled = reconcilePeriod(p2Pre, [
-      { rating: p1Pre.rating, rd: p1Pre.rd, score: 1 },
-      { rating: p3Pre.rating, rd: p3Pre.rd, score: 1 },
+    // uses its pre-period (baseline) state against both of ITS opponents' (P1, P3)
+    // pre-period (baseline) ratings (P2 beat both, so score 1 from P2's
+    // perspective both times).
+    const p2Reconciled = reconcilePeriod(baseline, [
+      { rating: baseline.rating, rd: baseline.rd, score: 1 },
+      { rating: baseline.rating, rd: baseline.rd, score: 1 },
     ]);
-    const contaminated = reconcilePeriod(p3Pre, [{ rating: p2Reconciled.rating, rd: p2Reconciled.rd, score: 0 }]);
+    const contaminated = reconcilePeriod(baseline, [{ rating: p2Reconciled.rating, rd: p2Reconciled.rd, score: 0 }]);
 
     const actual = await dbClient.query(
       `select rating_after, rd_after from rating_events
@@ -175,5 +179,51 @@ describe('POST /functions/v1/close-week', () => {
     // confirms the actual result did NOT come from the contaminated code path.
     expect(Math.abs(correct.rating - contaminated.rating)).toBeGreaterThan(1);
     expect(Math.abs(actualRatingAfter - contaminated.rating)).toBeGreaterThan(1);
+  });
+
+  it('reconciles from the true pre-period rating, not the live instant-nudged rating', async () => {
+    const playerA = await createPlayer('CloseWeek Baseline Player A');
+    const playerB = await createPlayer('CloseWeek Baseline Player B');
+
+    await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        season_id: seasonId, match_date: '2026-04-01',
+        player_a_id: playerA, player_b_id: playerB,
+        frames_a: 5, frames_b: 2,
+      }),
+    });
+
+    const instantEvent = await dbClient.query(
+      `select rating_before from rating_events where player_id = $1 and season_id = $2 and event_type = 'instant'`,
+      [playerA, seasonId],
+    );
+    const preMatchRating = Number(instantEvent.rows[0].rating_before);
+
+    const closeResponse = await fetch(`${status.API_URL}/functions/v1/close-week`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ season_id: seasonId, week_ending: '2026-04-01' }),
+    });
+    expect(closeResponse.status).toBe(200);
+
+    const reconciliationEvent = await dbClient.query(
+      `select rating_before from rating_events where player_id = $1 and season_id = $2 and event_type = 'weekly_reconciliation' order by created_at desc limit 1`,
+      [playerA, seasonId],
+    );
+    // The reconciliation's rating_before must equal the pre-MATCH baseline
+    // (the true pre-period rating), not the post-instant-nudge live rating
+    // that player_season_ratings held at close time.
+    expect(Number(reconciliationEvent.rows[0].rating_before)).toBeCloseTo(preMatchRating, 5);
+  });
+
+  it('rejects a week_ending date before the season started', async () => {
+    const response = await fetch(`${status.API_URL}/functions/v1/close-week`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ season_id: seasonId, week_ending: '2019-01-01' }),
+    });
+    expect(response.status).toBe(400);
   });
 });
