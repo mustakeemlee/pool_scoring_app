@@ -39,6 +39,8 @@ export function CloseWeekPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.leaderboard(seasonId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.gradeDistribution(seasonId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.matchHistory(seasonId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.players(seasonId) });
+      queryClient.invalidateQueries({ queryKey: ['playerProfile'] });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Failed to close the week.');
     } finally {
@@ -62,10 +64,7 @@ export function CloseWeekPage() {
           <Label htmlFor="weekEnding">Week ending</Label>
           <Input id="weekEnding" type="date" value={weekEnding} onChange={(e) => setWeekEnding(e.target.value)} />
         </div>
-        <p className="text-sm">
-          This will close <strong>{matchesInWeek.length}</strong> match(es) for <strong>{playerCount}</strong>{' '}
-          player(s).
-        </p>
+        <p className="text-sm">This will close every open match on or before this date.</p>
         {error && <p className="text-destructive text-sm">{error}</p>}
         <ConfirmDialog
           trigger={

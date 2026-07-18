@@ -1,10 +1,11 @@
 // web/src/hooks/useIsAdmin.ts
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
+import { queryKeys } from '@/lib/queryKeys';
 
 export function useIsAdmin(userId: string | undefined) {
   return useQuery({
-    queryKey: ['isAdmin', userId ?? ''],
+    queryKey: queryKeys.isAdmin(userId ?? ''),
     queryFn: async (): Promise<boolean> => {
       const { data, error } = await supabase
         .from('admin_users')

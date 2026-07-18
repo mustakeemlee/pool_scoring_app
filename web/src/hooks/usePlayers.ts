@@ -1,6 +1,7 @@
 // web/src/hooks/usePlayers.ts
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
+import { queryKeys } from '@/lib/queryKeys';
 
 export interface PlayerOption {
   id: string;
@@ -10,7 +11,7 @@ export interface PlayerOption {
 
 export function usePlayers(seasonId: string | undefined) {
   return useQuery({
-    queryKey: ['players', seasonId ?? ''],
+    queryKey: queryKeys.players(seasonId ?? ''),
     queryFn: async (): Promise<PlayerOption[]> => {
       const [playersRes, ratingsRes] = await Promise.all([
         supabase.from('players').select('id, full_name').eq('is_active', true).order('full_name', { ascending: true }),

@@ -7,4 +7,6 @@ export const queryKeys = {
   openMatches: (seasonId: string) => ['openMatches', seasonId] as const,
   seasons: () => ['seasons'] as const,
   activeSeason: () => ['activeSeason'] as const,
+  players: (seasonId: string) => ['players', seasonId] as const,
+  isAdmin: (userId: string) => ['isAdmin', userId] as const,
 };

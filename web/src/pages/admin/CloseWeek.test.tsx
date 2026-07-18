@@ -48,10 +48,9 @@ describe('CloseWeekPage', () => {
     mockToastSuccess.mockReset();
   });
 
-  it('shows the blast radius (match/player count) before confirming', () => {
+  it('shows generic close-scope wording instead of a client-side count estimate', () => {
     renderPage();
-    expect(screen.getByText('1')).toBeInTheDocument(); // match count
-    expect(screen.getByText('2')).toBeInTheDocument(); // player count
+    expect(screen.getByText('This will close every open match on or before this date.')).toBeInTheDocument();
   });
 
   it('calls closeWeek only after the confirm dialog is accepted', async () => {
@@ -82,12 +81,17 @@ describe('CloseWeekPage', () => {
 
     // Regression coverage per the Task 14/15 lesson: assert the exact query keys via the real
     // queryKeys builder (not hand-typed arrays), and the exact call count/order, so this test
-    // fails if an invalidation is dropped, duplicated, reordered, or its key drifts.
-    expect(invalidateSpy).toHaveBeenCalledTimes(4);
+    // fails if an invalidation is dropped, duplicated, reordered, or its key drifts. Closing a
+    // week reconciles every affected player's rating/grade, so it must also invalidate the
+    // players list and the whole playerProfile key prefix (every player's profile, since the
+    // close-week response doesn't say which specific players were reconciled).
+    expect(invalidateSpy).toHaveBeenCalledTimes(6);
     expect(invalidateSpy).toHaveBeenNthCalledWith(1, { queryKey: queryKeys.openMatches('s1') });
     expect(invalidateSpy).toHaveBeenNthCalledWith(2, { queryKey: queryKeys.leaderboard('s1') });
     expect(invalidateSpy).toHaveBeenNthCalledWith(3, { queryKey: queryKeys.gradeDistribution('s1') });
     expect(invalidateSpy).toHaveBeenNthCalledWith(4, { queryKey: queryKeys.matchHistory('s1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(5, { queryKey: queryKeys.players('s1') });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(6, { queryKey: ['playerProfile'] });
   });
 
   it('shows the edge function error message verbatim on failure', async () => {

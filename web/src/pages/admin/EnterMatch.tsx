@@ -77,7 +77,7 @@ export function EnterMatchPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.matchHistory(activeSeason.data.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.playerProfile(playerAId, activeSeason.data.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.playerProfile(playerBId, activeSeason.data.id) });
-      queryClient.invalidateQueries({ queryKey: ['players', activeSeason.data.id] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.players(activeSeason.data.id) });
 
       setPlayerAId('');
       setPlayerBId('');
