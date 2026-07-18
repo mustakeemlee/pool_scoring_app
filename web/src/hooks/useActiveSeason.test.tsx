@@ -4,13 +4,17 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-const mockSingle = vi.fn();
+const mockMaybeSingle = vi.fn();
 vi.mock('@/lib/supabaseClient', () => ({
   supabase: {
     from: () => ({
       select: () => ({
         eq: () => ({
-          single: mockSingle,
+          order: () => ({
+            limit: () => ({
+              maybeSingle: mockMaybeSingle,
+            }),
+          }),
         }),
       }),
     }),
@@ -26,11 +30,11 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe('useActiveSeason', () => {
   beforeEach(() => {
-    mockSingle.mockReset();
+    mockMaybeSingle.mockReset();
   });
 
   it('returns the season with status=active', async () => {
-    mockSingle.mockResolvedValue({
+    mockMaybeSingle.mockResolvedValue({
       data: { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' },
       error: null,
     });
@@ -43,10 +47,19 @@ describe('useActiveSeason', () => {
   });
 
   it('surfaces a query error', async () => {
-    mockSingle.mockResolvedValue({ data: null, error: { message: 'no active season' } });
+    mockMaybeSingle.mockResolvedValue({ data: null, error: { message: 'no active season' } });
 
     const { result } = renderHook(() => useActiveSeason(), { wrapper });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+
+  it('throws a clear error when zero rows match (no active season)', async () => {
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const { result } = renderHook(() => useActiveSeason(), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('No active season found.');
   });
 });
