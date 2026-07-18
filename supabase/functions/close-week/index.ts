@@ -54,35 +54,53 @@ Deno.serve(async (req: Request) => {
         throw new HttpError(400, 'week_ending cannot be before the season start_date');
       }
 
-      const matches = await sql`
+      const openMatchesQuery = () => sql`
         select id, player_a_id, player_b_id, winner_id from matches
         where season_id = ${season_id}
           and is_period_closed = false
           and is_voided = false
           and match_date <= ${week_ending}
       `;
+      const playerIdsOf = (rows: Awaited<ReturnType<typeof openMatchesQuery>>) =>
+        Array.from(new Set(rows.flatMap((m) => [m.player_a_id as string, m.player_b_id as string])));
 
-      const playerIds = Array.from(
-        new Set(matches.flatMap((m) => [m.player_a_id as string, m.player_b_id as string])),
-      );
+      let matches = await openMatchesQuery();
+      let playerIds = playerIdsOf(matches);
+      const lockedPlayerIds = new Set<string>();
 
-      // Lock every involved player's rating row up front, in ascending id
-      // order, BEFORE reading the pre-period snapshot below. Two concurrent
-      // close-week calls whose open-match sweeps overlap on any player would
-      // otherwise each read the same pre-period baseline and reconcile on top
-      // of it, double-reconciling that player for the period. Taking the locks
-      // in a fixed (sorted) order also stops two such calls from deadlocking
-      // when their player sets intersect in a different order. ON CONFLICT DO
-      // UPDATE on a harmless self-assignment both guarantees the row exists and
-      // takes the row lock (held until commit/rollback), mirroring the pattern
-      // in enter-match/correct-match.
-      const lockOrderedPlayerIds = [...playerIds].sort();
-      for (const playerId of lockOrderedPlayerIds) {
-        await sql`
-          insert into player_season_ratings (player_id, season_id)
-          values (${playerId}, ${season_id})
-          on conflict (player_id, season_id) do update set player_id = excluded.player_id
-        `;
+      // Lock every involved player's rating row, in ascending id order, BEFORE
+      // reading the pre-period snapshot below -- and re-read the open-matches
+      // set immediately after, using it (not the pre-lock read) for the rest
+      // of the function. The lock alone protects the baseline READ, but not
+      // WHICH matches get reconciled: two concurrent close-week calls for the
+      // same week both see the same pre-lock open-matches list, then serialize
+      // on these locks -- the second call's stale list would otherwise still
+      // get reconciled a second time on top of the first call's already-
+      // committed weekly_reconciliation, double-counting the same games via a
+      // different path than the original bug. Re-querying after the locks
+      // means the second call sees is_period_closed = true (committed by the
+      // first call before its locks released) and reconciles nothing.
+      //
+      // Bounded to two passes: if the post-lock re-query reveals a brand-new
+      // match for players never yet locked (a new enter-match landing for an
+      // entirely different pairing in the same instant), lock those too and
+      // re-query once more. Two passes covers this without an unbounded loop;
+      // a third concurrent write racing the exact same narrow window on top
+      // of that is not a realistic scenario for this app's admin workflow.
+      for (let pass = 0; pass < 2; pass++) {
+        const lockOrderedPlayerIds = [...playerIds].filter((id) => !lockedPlayerIds.has(id)).sort();
+        for (const playerId of lockOrderedPlayerIds) {
+          await sql`
+            insert into player_season_ratings (player_id, season_id)
+            values (${playerId}, ${season_id})
+            on conflict (player_id, season_id) do update set player_id = excluded.player_id
+          `;
+          lockedPlayerIds.add(playerId);
+        }
+
+        matches = await openMatchesQuery();
+        playerIds = playerIdsOf(matches);
+        if (playerIds.every((id) => lockedPlayerIds.has(id))) break;
       }
 
       // Snapshot every involved player's PRE-period rating/rd/volatility up
