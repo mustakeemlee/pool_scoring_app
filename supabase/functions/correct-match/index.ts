@@ -2,10 +2,15 @@
 import { createAuthedClient, createServiceRoleClient } from '../_shared/supabaseClients.ts';
 import { requireAdmin } from '../_shared/requireAdmin.ts';
 import { jsonResponse } from '../_shared/response.ts';
+import { withTransaction, type TransactionSql } from '../_shared/dbTransaction.ts';
+import { HttpError } from '../_shared/httpError.ts';
+import { isUuid, isValidFrameCount } from '../_shared/validation.ts';
 import { applyInstantNudge } from '../_shared/rating/elo.ts';
 import { gradeForRating } from '../_shared/rating/grade.ts';
 import { calculateSeasonPoints } from '../_shared/rating/seasonPoints.ts';
 import { MIN_MATCHES_FOR_RANKING } from '../_shared/rating/constants.ts';
+import { getPriorPeriodBaseline } from '../_shared/priorPeriodBaseline.ts';
+import { recomputePlayerStatistics } from '../_shared/playerStatisticsRecompute.ts';
 
 interface CorrectMatchBody {
   match_id: string;
@@ -14,14 +19,56 @@ interface CorrectMatchBody {
   frames_b?: number;
 }
 
+async function lockRatingRow(sql: TransactionSql, playerId: string, seasonId: string): Promise<void> {
+  // Mirrors enter-match's ensureRatingRow: an ON CONFLICT DO UPDATE with a
+  // harmless self-assignment both guarantees the row exists and takes a row
+  // lock held until this transaction commits/rolls back. Acquiring it up
+  // front (in ascending-id order, see the call site) stops a concurrent
+  // enter-match / close-week / correct-match touching either player from
+  // interleaving mid-correction, and the fixed ordering prevents a deadlock
+  // with another request naming the same two players in the opposite order.
+  await sql`
+    insert into player_season_ratings (player_id, season_id)
+    values (${playerId}, ${seasonId})
+    on conflict (player_id, season_id) do update set player_id = excluded.player_id
+  `;
+}
+
 Deno.serve(async (req: Request) => {
   const authedClient = createAuthedClient(req);
   const db = createServiceRoleClient();
   const admin = await requireAdmin(authedClient, db);
   if (!admin) return jsonResponse({ error: 'Unauthorized' }, 401);
 
-  const body = (await req.json()) as CorrectMatchBody;
+  let body: CorrectMatchBody;
+  try {
+    body = (await req.json()) as CorrectMatchBody;
+  } catch {
+    return jsonResponse({ error: 'Request body must be valid JSON' }, 400);
+  }
 
+  // Same input-validation class as enter-match, reachable here too: a frame
+  // count arriving as a string would make the `framesA > framesB` winner
+  // comparison below a string comparison ("2" > "10" is true), storing the
+  // wrong winner_id. frames_a/frames_b are optional on a correction, so each
+  // is only validated when provided; if both are provided they must differ
+  // (the matches table also enforces frames_a <> frames_b as a backstop).
+  if (!isUuid(body.match_id)) {
+    return jsonResponse({ error: 'match_id must be a valid UUID' }, 400);
+  }
+  if (body.frames_a !== undefined && !isValidFrameCount(body.frames_a)) {
+    return jsonResponse({ error: 'frames_a must be an integer between 0 and 50' }, 400);
+  }
+  if (body.frames_b !== undefined && !isValidFrameCount(body.frames_b)) {
+    return jsonResponse({ error: 'frames_b must be an integer between 0 and 50' }, 400);
+  }
+  if (body.frames_a !== undefined && body.frames_b !== undefined && body.frames_a === body.frames_b) {
+    return jsonResponse({ error: 'frames_a and frames_b cannot be equal' }, 400);
+  }
+
+  // Load the original match and run the not-found / already-closed / already-
+  // voided early returns BEFORE opening the transaction: these are read-only
+  // checks, so only the actual mutation sequence below needs to be atomic.
   const { data: original } = await db
     .from('matches')
     .select('*')
@@ -40,84 +87,68 @@ Deno.serve(async (req: Request) => {
   const matchDate = body.match_date ?? original.match_date;
   const winnerId = framesA > framesB ? original.player_a_id : original.player_b_id;
 
-  // Insert the corrected match BEFORE voiding the original. This way, if the
-  // insert fails (e.g. frames_a === frames_b violates the matches table's
-  // check constraint), the function returns an error having changed nothing:
-  // the original match is still live and un-voided, so the admin can safely
-  // retry correct-match with corrected data. Voiding first (the old order)
-  // meant a failed insert could strand the original as voided with no
-  // replacement, and a subsequent fresh enter-match call for that pairing
-  // would silently double-count the voided match's rating impact.
-  const { data: corrected, error: insertError } = await db
-    .from('matches')
-    .insert({
-      season_id: original.season_id,
-      match_date: matchDate,
-      player_a_id: original.player_a_id,
-      player_b_id: original.player_b_id,
-      frames_a: framesA,
-      frames_b: framesB,
-      winner_id: winnerId,
-      entered_by: admin.id,
-    })
-    .select('id')
-    .single();
-  if (insertError) return jsonResponse({ error: insertError.message }, 400);
+  try {
+    const correctedId = await withTransaction(async (sql) => {
+      // Lock both players' rating rows in a fixed (ascending id) order, before
+      // touching anything else, regardless of which slot (A/B) each occupies,
+      // so two concurrent requests naming the same two players in opposite
+      // order can never deadlock against each other.
+      const [lowId, highId] = [original.player_a_id, original.player_b_id].sort();
+      await lockRatingRow(sql, lowId, original.season_id);
+      await lockRatingRow(sql, highId, original.season_id);
 
-  const { error: createdAuditError } = await db.from('match_audit_log').insert({
-    match_id: corrected.id,
-    changed_by: admin.id,
-    change_type: 'created',
-    new_values: { ...body, frames_a: framesA, frames_b: framesB, match_date: matchDate },
-  });
-  if (createdAuditError) return jsonResponse({ error: createdAuditError.message }, 500);
+      // Insert the corrected match BEFORE voiding the original. This way, if the
+      // insert fails (e.g. frames_a === frames_b violates the matches table's
+      // check constraint), the function returns an error having changed nothing:
+      // the original match is still live and un-voided, so the admin can safely
+      // retry correct-match with corrected data. Voiding first (the old order)
+      // meant a failed insert could strand the original as voided with no
+      // replacement, and a subsequent fresh enter-match call for that pairing
+      // would silently double-count the voided match's rating impact.
+      const [corrected] = await sql`
+        insert into matches (season_id, match_date, player_a_id, player_b_id, frames_a, frames_b, winner_id, entered_by)
+        values (${original.season_id}, ${matchDate}, ${original.player_a_id}, ${original.player_b_id},
+                ${framesA}, ${framesB}, ${winnerId}, ${admin.id})
+        returning id
+      `;
 
-  const { error: voidError } = await db
-    .from('matches')
-    .update({ is_voided: true })
-    .eq('id', body.match_id);
-  if (voidError) return jsonResponse({ error: voidError.message }, 500);
+      await sql`
+        insert into match_audit_log (match_id, changed_by, change_type, new_values)
+        values (${corrected.id}, ${admin.id}, 'created',
+                ${sql.json({ ...body, frames_a: framesA, frames_b: framesB, match_date: matchDate } as unknown as Record<string, unknown>)})
+      `;
 
-  const { error: voidAuditError } = await db.from('match_audit_log').insert({
-    match_id: body.match_id,
-    changed_by: admin.id,
-    change_type: 'voided',
-    old_values: original,
-  });
-  if (voidAuditError) return jsonResponse({ error: voidAuditError.message }, 500);
+      await sql`update matches set is_voided = true where id = ${body.match_id}`;
 
-  const replayAResult = await replayOpenWeek(db, original.season_id, original.player_a_id);
-  if (replayAResult.error) return jsonResponse({ error: replayAResult.error }, 500);
+      await sql`
+        insert into match_audit_log (match_id, changed_by, change_type, old_values)
+        values (${body.match_id}, ${admin.id}, 'voided', ${sql.json(original as unknown as Record<string, unknown>)})
+      `;
 
-  const replayBResult = await replayOpenWeek(db, original.season_id, original.player_b_id);
-  if (replayBResult.error) return jsonResponse({ error: replayBResult.error }, 500);
+      await replayOpenWeek(sql, original.season_id, original.player_a_id);
+      await replayOpenWeek(sql, original.season_id, original.player_b_id);
 
-  return jsonResponse({ corrected_match_id: corrected.id }, 200);
+      return corrected.id as string;
+    });
+
+    return jsonResponse({ corrected_match_id: correctedId }, 200);
+  } catch (err) {
+    if (err instanceof HttpError) return jsonResponse({ error: err.message }, err.status);
+    return jsonResponse({ error: err instanceof Error ? err.message : 'Internal error' }, 500);
+  }
 });
 
-async function replayOpenWeek(
-  db: ReturnType<typeof createServiceRoleClient>,
-  seasonId: string,
-  playerId: string,
-): Promise<{ error: string | null }> {
-  const { data: lastClosedEvent } = await db
-    .from('rating_events')
-    .select('rating_after, rd_after')
-    .eq('player_id', playerId)
-    .eq('season_id', seasonId)
-    .in('event_type', ['weekly_reconciliation', 'season_carryover'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  // If no weekly_reconciliation/season_carryover event exists yet, this
-  // player's season began fresh (player_season_ratings always starts at the
-  // baseline defaults) and has had no close-week run for them yet, so the
-  // pre-week baseline is simply that starting point — never the row's
-  // *current* rating/rd, since those already include this week's
-  // now-being-replaced instant nudges.
-  const rating = lastClosedEvent ? lastClosedEvent.rating_after : 1500;
-  const rd = lastClosedEvent ? lastClosedEvent.rd_after : 350;
+async function replayOpenWeek(sql: TransactionSql, seasonId: string, playerId: string): Promise<void> {
+  // The pre-week baseline: the player's rating/rd as of their last formally
+  // closed period (weekly_reconciliation / season_carryover), or the season's
+  // starting defaults if no week has ever been closed for them yet -- never
+  // the row's *current* rating/rd, since those already include this week's
+  // now-being-replaced instant nudges. Extracted into getPriorPeriodBaseline
+  // so close-week derives the identical baseline. Volatility isn't touched by
+  // the open-week instant nudges, so only rating/rd are read here.
+  const baseline = await getPriorPeriodBaseline(sql, playerId, seasonId);
+  const rating = baseline.rating;
+  const rd = baseline.rd;
 
   // KNOWN LIMITATION (documented, not fixed — see task-8 review finding 1):
   // chronological order here is match_date, then created_at as a tiebreaker.
@@ -133,28 +164,23 @@ async function replayOpenWeek(
   // tiebreaker independent of row-insertion time (e.g. an explicit
   // sequence/slot number), which is out of scope for this open-week-only
   // correction feature.
-  const { data: openMatches } = await db
-    .from('matches')
-    .select('id, player_a_id, player_b_id, frames_a, frames_b, winner_id, match_date, created_at')
-    .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
-    .eq('season_id', seasonId)
-    .eq('is_period_closed', false)
-    .eq('is_voided', false)
-    .order('match_date', { ascending: true })
-    .order('created_at', { ascending: true });
+  const openMatches = await sql`
+    select id, player_a_id, player_b_id, frames_a, frames_b, winner_id, match_date, created_at
+    from matches
+    where (player_a_id = ${playerId} or player_b_id = ${playerId})
+      and season_id = ${seasonId}
+      and is_period_closed = false
+      and is_voided = false
+    order by match_date asc, created_at asc
+  `;
 
-  const openMatchIds = (openMatches ?? []).map((m) => m.id);
+  const openMatchIds = openMatches.map((m) => m.id);
   if (openMatchIds.length > 0) {
-    const { error: deleteError } = await db
-      .from('rating_events')
-      .delete()
-      .eq('player_id', playerId)
-      .eq('season_id', seasonId)
-      .eq('event_type', 'instant')
-      .in('match_id', openMatchIds);
-    if (deleteError) {
-      return { error: `Failed to delete stale instant rating_events: ${deleteError.message}` };
-    }
+    await sql`
+      delete from rating_events
+      where player_id = ${playerId} and season_id = ${seasonId}
+        and event_type = 'instant' and match_id in ${sql(openMatchIds)}
+    `;
   }
 
   let currentRating = rating;
@@ -173,44 +199,39 @@ async function replayOpenWeek(
   // (is_voided = false, is_period_closed = false, i.e. the freshly-inserted
   // replacement row) are never counted as "closed" here, so they aren't
   // double-counted against the open-week loop below.
-  const { count: closedMatchesCount, error: closedCountError } = await db
-    .from('matches')
-    .select('id', { count: 'exact', head: true })
-    .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
-    .eq('season_id', seasonId)
-    .eq('is_period_closed', true)
-    .eq('is_voided', false);
-  if (closedCountError) {
-    return { error: `Failed to count closed-week matches: ${closedCountError.message}` };
-  }
-  let matchesPlayed = closedMatchesCount ?? 0;
+  const [closedCountRow] = await sql`
+    select count(*)::int as count from matches
+    where (player_a_id = ${playerId} or player_b_id = ${playerId})
+      and season_id = ${seasonId}
+      and is_period_closed = true
+      and is_voided = false
+  `;
+  let matchesPlayed = closedCountRow.count;
 
   // season_points is likewise cumulative across the season (see
   // enter-match: season_points: args.priorSeasonPoints + seasonPointsEarned)
-  // and, unlike player_statistics (documented below as a known, self-healing
-  // limitation), is NOT self-healing: nothing else ever recomputes it. The
-  // cumulative season_points value as of this player's last formal close is
-  // exactly what close-week writes into weekly_rankings.season_points (see
+  // and, unlike player_statistics (recomputed in full below), is NOT
+  // self-healing: nothing else ever recomputes it. The cumulative
+  // season_points value as of this player's last formal close is exactly what
+  // close-week writes into weekly_rankings.season_points (see
   // close-week/index.ts:179, which copies player_season_ratings.season_points
   // verbatim at close time) — so the most recent weekly_rankings row for this
   // player/season is the correct baseline to replay this open week's
   // corrected points on top of. If no week has ever been closed for this
   // player, there's no weekly_rankings row yet and the season-long baseline
   // is simply 0.
-  const { data: lastWeeklyRanking, error: lastRankingError } = await db
-    .from('weekly_rankings')
-    .select('season_points')
-    .eq('player_id', playerId)
-    .eq('season_id', seasonId)
-    .order('week_ending', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (lastRankingError) {
-    return { error: `Failed to load season_points baseline: ${lastRankingError.message}` };
-  }
+  const [lastWeeklyRanking] = await sql`
+    select season_points from weekly_rankings
+    where player_id = ${playerId} and season_id = ${seasonId}
+    order by week_ending desc
+    limit 1
+  `;
+  // weekly_rankings.season_points is an integer column, which postgres.js
+  // already returns as a JS number (only `numeric` columns come back as
+  // strings) — no coercion needed, matching enter-match's treatment.
   let seasonPoints = lastWeeklyRanking?.season_points ?? 0;
 
-  for (const match of openMatches ?? []) {
+  for (const match of openMatches) {
     const isPlayerA = match.player_a_id === playerId;
     const opponentId = isPlayerA ? match.player_b_id : match.player_a_id;
     // KNOWN LIMITATION (documented, not fixed — see task-8 review finding 2):
@@ -229,38 +250,34 @@ async function replayOpenWeek(
     // state), which edges toward the "full cross-period replay" complexity
     // this plan deliberately scoped out of Phase 2 in favor of
     // open-week-only corrections.
-    const { data: opponentRow } = await db
-      .from('player_season_ratings')
-      .select('rating, rd')
-      .eq('player_id', opponentId)
-      .eq('season_id', seasonId)
-      .single();
+    const [opponentRow] = await sql`
+      select rating, rd from player_season_ratings
+      where player_id = ${opponentId} and season_id = ${seasonId}
+    `;
+    // rating/rd are `numeric` columns -> strings from postgres.js; coerce
+    // before any arithmetic, and fall back to the baseline defaults if the
+    // opponent somehow has no rating row yet.
+    const opponentRating = opponentRow ? Number(opponentRow.rating) : 1500;
+    const opponentRd = opponentRow ? Number(opponentRow.rd) : 350;
 
     const nudge = applyInstantNudge({
       ratingA: currentRating,
       rdA: currentRd,
-      ratingB: opponentRow?.rating ?? 1500,
-      rdB: opponentRow?.rd ?? 350,
+      ratingB: opponentRating,
+      rdB: opponentRd,
       framesA: isPlayerA ? match.frames_a : match.frames_b,
       framesB: isPlayerA ? match.frames_b : match.frames_a,
     });
 
-    const { error: ratingEventError } = await db.from('rating_events').insert({
-      match_id: match.id,
-      player_id: playerId,
-      season_id: seasonId,
-      rating_before: currentRating,
-      rd_before: currentRd,
-      rating_after: nudge.newRatingA,
-      rd_after: currentRd,
-      expected_score: nudge.expectedScoreA,
-      actual_score: nudge.actualScoreA,
-      delta: nudge.deltaA,
-      event_type: 'instant',
-    });
-    if (ratingEventError) {
-      return { error: `Failed to insert replay rating_events: ${ratingEventError.message}` };
-    }
+    await sql`
+      insert into rating_events (
+        match_id, player_id, season_id, rating_before, rd_before,
+        rating_after, rd_after, expected_score, actual_score, delta, event_type
+      ) values (
+        ${match.id}, ${playerId}, ${seasonId}, ${currentRating}, ${currentRd},
+        ${nudge.newRatingA}, ${currentRd}, ${nudge.expectedScoreA}, ${nudge.actualScoreA}, ${nudge.deltaA}, 'instant'
+      )
+    `;
 
     // Mirrors enter-match's own season_points calculation exactly:
     // ownRating is the rating AFTER this match's nudge (nudge.newRatingA),
@@ -274,40 +291,29 @@ async function replayOpenWeek(
       framesFor: isPlayerA ? match.frames_a : match.frames_b,
       framesAgainst: isPlayerA ? match.frames_b : match.frames_a,
       ownRating: nudge.newRatingA,
-      opponentRating: opponentRow?.rating ?? 1500,
+      opponentRating,
     });
 
     currentRating = nudge.newRatingA;
     matchesPlayed += 1;
   }
 
-  const { error: updateError } = await db
-    .from('player_season_ratings')
-    .update({
-      rating: currentRating,
-      matches_played: matchesPlayed,
-      is_provisional: matchesPlayed < MIN_MATCHES_FOR_RANKING,
-      grade: gradeForRating(currentRating),
-      season_points: seasonPoints,
-    })
-    .eq('player_id', playerId)
-    .eq('season_id', seasonId);
-  if (updateError) {
-    return { error: `Failed to update player_season_ratings: ${updateError.message}` };
-  }
+  await sql`
+    update player_season_ratings
+    set rating = ${currentRating},
+        matches_played = ${matchesPlayed},
+        is_provisional = ${matchesPlayed < MIN_MATCHES_FOR_RANKING},
+        grade = ${gradeForRating(currentRating)},
+        season_points = ${seasonPoints}
+    where player_id = ${playerId} and season_id = ${seasonId}
+  `;
 
-  // KNOWN LIMITATION (documented, not fixed — see task-8 review finding 3):
-  // this function updates rating_events and player_season_ratings but never
-  // recomputes player_statistics (wins, losses, streaks, frames_won/lost,
-  // form_5/10, form_score) for either player. Those fields still reflect
-  // the voided match's original numbers until the player's next fresh
-  // enter-match call, since enter-match's updatePlayerAfterMatch
-  // recomputes player_statistics from the full match history each time —
-  // so a subsequent match will self-correct these fields, but they're
-  // stale in the interim between a correction and that player's next
-  // match. Correctly recomputing player_statistics here would mean reusing
-  // the same aggregation logic enter-match's updatePlayerAfterMatch already
-  // performs — worth extracting into a shared helper in a future task
-  // rather than duplicating that logic inline in this replay.
-  return { error: null };
+  // Recompute player_statistics (wins, losses, streaks, frames_won/lost,
+  // form_5/10, form_score) from the full non-voided match history now that
+  // this player's open week has been replayed. This fixes the previously
+  // documented limitation where a correction updated rating_events and
+  // player_season_ratings but left player_statistics reflecting the voided
+  // match's numbers until the player's next fresh enter-match call. Shares the
+  // exact aggregation enter-match uses via the extracted helper.
+  await recomputePlayerStatistics(sql, playerId, seasonId);
 }

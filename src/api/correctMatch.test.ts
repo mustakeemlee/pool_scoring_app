@@ -63,6 +63,11 @@ async function closeWeek(targetSeasonId: string, weekEnding: string) {
   });
 }
 
+async function createPlayer(name: string): Promise<string> {
+  const result = await dbClient.query(`insert into players (full_name) values ($1) returning id`, [name]);
+  return result.rows[0].id;
+}
+
 beforeAll(async () => {
   status = getSupabaseStatus();
   const admin = await provisionTestAdmin(status);
@@ -227,5 +232,41 @@ describe('PATCH /functions/v1/correct-match', () => {
     // been the ORIGINAL 5-1 match's now-voided points still baked in, with
     // nothing added for the correction).
     expect(finalRow.rows[0].season_points).toBe(baselineSeasonPoints + expectedPointsEarned);
+  });
+
+  it('recomputes player_statistics for both players after a correction, not just rating', async () => {
+    const playerA = await createPlayer('Stats Correction Player A');
+    const playerB = await createPlayer('Stats Correction Player B');
+
+    const enterResponse = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        season_id: seasonId, match_date: '2026-03-01',
+        player_a_id: playerA, player_b_id: playerB,
+        frames_a: 5, frames_b: 1,
+      }),
+    });
+    const { match_id: matchId } = await enterResponse.json();
+
+    // Flip the result: B actually won 1-5.
+    const correctResponse = await fetch(`${status.API_URL}/functions/v1/correct-match`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ match_id: matchId, frames_a: 1, frames_b: 5 }),
+    });
+    expect(correctResponse.status).toBe(200);
+
+    const statsA = await dbClient.query(
+      `select wins, losses from player_statistics where player_id = $1 and season_id = $2`,
+      [playerA, seasonId],
+    );
+    expect(statsA.rows[0]).toEqual({ wins: 0, losses: 1 });
+
+    const statsB = await dbClient.query(
+      `select wins, losses from player_statistics where player_id = $1 and season_id = $2`,
+      [playerB, seasonId],
+    );
+    expect(statsB.rows[0]).toEqual({ wins: 1, losses: 0 });
   });
 });
