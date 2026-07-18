@@ -268,5 +268,16 @@ describe('PATCH /functions/v1/correct-match', () => {
       [playerB, seasonId],
     );
     expect(statsB.rows[0]).toEqual({ wins: 1, losses: 0 });
+
+    // Regression guard: avg_opponent_rating must be derived from the
+    // opponent's real rating, not silently 0. This specifically catches a
+    // bug where recomputing player A's statistics before player B's replay
+    // had written its rating_events row for the corrected match made A's
+    // opponent-rating average see zero opponent events for that match.
+    const statsAFull = await dbClient.query(
+      `select avg_opponent_rating from player_statistics where player_id = $1 and season_id = $2`,
+      [playerA, seasonId],
+    );
+    expect(Number(statsAFull.rows[0].avg_opponent_rating)).toBeCloseTo(1500, 2);
   });
 });

@@ -97,6 +97,23 @@ Deno.serve(async (req: Request) => {
       await lockRatingRow(sql, lowId, original.season_id);
       await lockRatingRow(sql, highId, original.season_id);
 
+      // Re-check voided/closed state now that both players' rows are locked
+      // (not just the read from before the transaction opened): if another
+      // correct-match call for this same match_id ran concurrently and
+      // committed while this request was waiting on the locks above, this
+      // request must not also insert a second corrected match on top of it.
+      // Sequential retries are already safe (the first commit voids the row,
+      // so a retry hits the plain is_voided check below) -- this specifically
+      // closes the window for two genuinely-overlapping requests.
+      const [current] = await sql`select is_voided, is_period_closed from matches where id = ${body.match_id}`;
+      if (!current) throw new HttpError(404, 'Match not found');
+      if (current.is_period_closed) {
+        throw new HttpError(400, 'Cannot correct a match whose week has already closed');
+      }
+      if (current.is_voided) {
+        throw new HttpError(400, 'Cannot correct a match that has already been voided');
+      }
+
       // Insert the corrected match BEFORE voiding the original. This way, if the
       // insert fails (e.g. frames_a === frames_b violates the matches table's
       // check constraint), the function returns an error having changed nothing:
@@ -127,6 +144,20 @@ Deno.serve(async (req: Request) => {
 
       await replayOpenWeek(sql, original.season_id, original.player_a_id);
       await replayOpenWeek(sql, original.season_id, original.player_b_id);
+
+      // Recompute player_statistics for BOTH players only after BOTH replays
+      // have finished writing their rating_events -- not inside
+      // replayOpenWeek itself. player_statistics.avg_opponent_rating is
+      // derived by reading the OPPONENT's 'instant' rating_events row for
+      // each shared match (see playerStatisticsRecompute.ts), and the
+      // corrected match has no such rows until each player's own replay
+      // creates them. Recomputing for player A immediately after A's replay
+      // (before B has replayed) would find zero opponent-events for the
+      // corrected match and silently write avg_opponent_rating = 0 for A.
+      // Waiting until both replays are done means both players' 'instant'
+      // events already exist by the time either recompute runs.
+      await recomputePlayerStatistics(sql, original.player_a_id, original.season_id);
+      await recomputePlayerStatistics(sql, original.player_b_id, original.season_id);
 
       return corrected.id as string;
     });
@@ -307,13 +338,7 @@ async function replayOpenWeek(sql: TransactionSql, seasonId: string, playerId: s
         season_points = ${seasonPoints}
     where player_id = ${playerId} and season_id = ${seasonId}
   `;
-
-  // Recompute player_statistics (wins, losses, streaks, frames_won/lost,
-  // form_5/10, form_score) from the full non-voided match history now that
-  // this player's open week has been replayed. This fixes the previously
-  // documented limitation where a correction updated rating_events and
-  // player_season_ratings but left player_statistics reflecting the voided
-  // match's numbers until the player's next fresh enter-match call. Shares the
-  // exact aggregation enter-match uses via the extracted helper.
-  await recomputePlayerStatistics(sql, playerId, seasonId);
+  // player_statistics is recomputed by the caller, once both players' open
+  // weeks have been replayed -- see the comment at the call site in
+  // Deno.serve for why this can't safely happen per-player, inline here.
 }
