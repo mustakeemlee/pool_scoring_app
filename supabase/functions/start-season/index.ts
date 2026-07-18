@@ -2,6 +2,9 @@
 import { createAuthedClient, createServiceRoleClient } from '../_shared/supabaseClients.ts';
 import { requireAdmin } from '../_shared/requireAdmin.ts';
 import { jsonResponse } from '../_shared/response.ts';
+import { withTransaction } from '../_shared/dbTransaction.ts';
+import { HttpError } from '../_shared/httpError.ts';
+import { isUuid, isNonEmptyString, isValidDateString } from '../_shared/validation.ts';
 import { applySeasonCarryover } from '../_shared/rating/seasonCarryover.ts';
 import { gradeForRating } from '../_shared/rating/grade.ts';
 
@@ -17,107 +20,126 @@ Deno.serve(async (req: Request) => {
   const admin = await requireAdmin(authedClient, db);
   if (!admin) return jsonResponse({ error: 'Unauthorized' }, 401);
 
-  const body = (await req.json()) as StartSeasonBody;
+  let body: StartSeasonBody;
+  try {
+    body = (await req.json()) as StartSeasonBody;
+  } catch {
+    return jsonResponse({ error: 'Request body must be valid JSON' }, 400);
+  }
+  const { previous_season_id, new_season_name, start_date } = body;
 
-  const { data: newSeason, error: seasonError } = await db
-    .from('seasons')
-    .insert({ name: body.new_season_name, start_date: body.start_date, status: 'active' })
-    .select('id')
-    .single();
-  if (seasonError) return jsonResponse({ error: seasonError.message }, 400);
-
-  if (body.previous_season_id) {
-    // Read every prior-season rating row once, up front, before any writes
-    // this run performs. Unlike close-week's Glicko-2 batch reconciliation
-    // (which reads OPPONENTS' live state mid-loop and can therefore be
-    // contaminated by earlier iterations' writes to the same table/season),
-    // each iteration here only ever reads its own player's row from this
-    // frozen snapshot and only ever writes rows scoped to the brand-new
-    // `newSeason.id` (a fresh row in player_season_ratings, a fresh row in
-    // rating_events) - never back into `previous_season_id`, and never a
-    // row another iteration could read. There is no cross-player dependency
-    // in the carryover formula at all (it's a pure function of that one
-    // player's own prior rating/rd/volatility), so there's no snapshot-
-    // freshness concern to guard against here the way there was in
-    // close-week: reading once up front is not just sufficient, it's
-    // equivalent to reading fresh on every iteration.
-    const { data: previousRatings, error: previousRatingsError } = await db
-      .from('player_season_ratings')
-      .select('player_id, rating, rd, volatility')
-      .eq('season_id', body.previous_season_id);
-    if (previousRatingsError) {
-      return jsonResponse(
-        { error: `Failed to load previous season ratings: ${previousRatingsError.message}` },
-        500,
-      );
-    }
-
-    for (const prior of previousRatings ?? []) {
-      const carried = applySeasonCarryover({
-        rating: prior.rating,
-        rd: prior.rd,
-        volatility: prior.volatility,
-      });
-
-      const { error: newRatingError } = await db.from('player_season_ratings').insert({
-        player_id: prior.player_id,
-        season_id: newSeason.id,
-        rating: carried.rating,
-        rd: carried.rd,
-        volatility: carried.volatility,
-        grade: gradeForRating(carried.rating),
-      });
-      if (newRatingError) {
-        return jsonResponse(
-          {
-            error: `Failed to insert carried-over player_season_ratings for player ${prior.player_id}: ${newRatingError.message}`,
-          },
-          500,
-        );
-      }
-
-      const { error: ratingEventError } = await db.from('rating_events').insert({
-        player_id: prior.player_id,
-        season_id: newSeason.id,
-        rating_before: prior.rating,
-        rd_before: prior.rd,
-        volatility_before: prior.volatility,
-        rating_after: carried.rating,
-        rd_after: carried.rd,
-        volatility_after: carried.volatility,
-        delta: carried.rating - prior.rating,
-        event_type: 'season_carryover',
-      });
-      if (ratingEventError) {
-        return jsonResponse(
-          {
-            error: `Failed to insert season_carryover rating_events for player ${prior.player_id}: ${ratingEventError.message}`,
-          },
-          500,
-        );
-      }
-    }
-
-    // Mark the previous season 'completed' now that the new season exists
-    // and carryover has finished without error. Design spec 5.4 never
-    // states this explicitly, and the original implementation never did it
-    // either, so two seasons could sit at status='active' simultaneously
-    // indefinitely (flagged during Task 10's review, fixed here). Placed
-    // after the carryover loop rather than before it so a mid-loop carryover
-    // failure (which already returns a 500 above) leaves the previous
-    // season's status untouched instead of marking it completed while its
-    // carryover is only partially done.
-    const { error: completePreviousError } = await db
-      .from('seasons')
-      .update({ status: 'completed' })
-      .eq('id', body.previous_season_id);
-    if (completePreviousError) {
-      return jsonResponse(
-        { error: `Failed to mark previous season as completed: ${completePreviousError.message}` },
-        500,
-      );
-    }
+  if (!isNonEmptyString(new_season_name)) {
+    return jsonResponse({ error: 'new_season_name must be a non-empty string' }, 400);
+  }
+  if (!isValidDateString(start_date)) {
+    return jsonResponse({ error: 'start_date must be a valid YYYY-MM-DD date' }, 400);
+  }
+  if (previous_season_id !== undefined && !isUuid(previous_season_id)) {
+    return jsonResponse({ error: 'previous_season_id must be a valid UUID' }, 400);
   }
 
-  return jsonResponse({ season_id: newSeason.id }, 201);
+  try {
+    const result = await withTransaction(async (sql) => {
+      // If a previous season was named it must reference a real row -- verify
+      // this BEFORE any writes, so a bogus previous_season_id aborts the entire
+      // transaction and no orphaned 'active' season is ever left behind (fixes
+      // the reproduced "nonexistent previous_season_id silently produced a new
+      // season with zero carryover" bug).
+      if (previous_season_id) {
+        const [prev] = await sql`select id from seasons where id = ${previous_season_id}`;
+        if (!prev) {
+          throw new HttpError(400, 'previous_season_id does not reference an existing season');
+        }
+      }
+
+      // Complete every currently-active season before creating the new active
+      // one, so at most one season is ever 'active'. This is the application
+      // half of the single-active-season guarantee; the database half is the
+      // seasons_single_active_idx partial unique index added by the audit-fixes
+      // migration. This upfront step replaces (and subsumes) the old code's
+      // separate "mark previous season completed" step that used to run at the
+      // very end. When a previous_season_id is explicitly named it is completed
+      // here too even if it is not currently 'active' (e.g. a 'draft'
+      // predecessor being wound down), so the season being superseded is always
+      // closed out before its ratings are carried forward.
+      if (previous_season_id) {
+        await sql`
+          update seasons set status = 'completed'
+          where status = 'active' or id = ${previous_season_id}
+        `;
+      } else {
+        await sql`update seasons set status = 'completed' where status = 'active'`;
+      }
+
+      const [newSeason] = await sql`
+        insert into seasons (name, start_date, status)
+        values (${new_season_name}, ${start_date}, 'active')
+        returning id
+      `;
+
+      if (previous_season_id) {
+        // Read every prior-season rating row once, up front, before any writes
+        // this run performs. Unlike close-week's Glicko-2 batch reconciliation
+        // (which reads OPPONENTS' live state mid-loop and can therefore be
+        // contaminated by earlier iterations' writes to the same table/season),
+        // each iteration here only ever reads its own player's row from this
+        // frozen snapshot and only ever writes rows scoped to the brand-new
+        // `newSeason.id` (a fresh row in player_season_ratings, a fresh row in
+        // rating_events) - never back into `previous_season_id`, and never a
+        // row another iteration could read. There is no cross-player dependency
+        // in the carryover formula at all (it's a pure function of that one
+        // player's own prior rating/rd/volatility), so there's no snapshot-
+        // freshness concern to guard against here the way there was in
+        // close-week: reading once up front is not just sufficient, it's
+        // equivalent to reading fresh on every iteration.
+        const previousRatings = await sql`
+          select player_id, rating, rd, volatility
+          from player_season_ratings
+          where season_id = ${previous_season_id}
+        `;
+
+        for (const prior of previousRatings) {
+          // postgres.js returns `numeric` columns (rating/rd/volatility) as
+          // JS strings, not numbers. Coerce every one with Number(...) before
+          // any arithmetic, or the carryover formula silently string-
+          // concatenates (e.g. rd "100" + 50 -> "10050") instead of adding.
+          const priorRating = Number(prior.rating);
+          const priorRd = Number(prior.rd);
+          const priorVolatility = Number(prior.volatility);
+
+          const carried = applySeasonCarryover({
+            rating: priorRating,
+            rd: priorRd,
+            volatility: priorVolatility,
+          });
+
+          await sql`
+            insert into player_season_ratings (player_id, season_id, rating, rd, volatility, grade)
+            values (
+              ${prior.player_id}, ${newSeason.id}, ${carried.rating}, ${carried.rd},
+              ${carried.volatility}, ${gradeForRating(carried.rating)}
+            )
+          `;
+
+          await sql`
+            insert into rating_events (
+              player_id, season_id, rating_before, rd_before, volatility_before,
+              rating_after, rd_after, volatility_after, delta, event_type
+            ) values (
+              ${prior.player_id}, ${newSeason.id}, ${priorRating}, ${priorRd}, ${priorVolatility},
+              ${carried.rating}, ${carried.rd}, ${carried.volatility}, ${carried.rating - priorRating},
+              'season_carryover'
+            )
+          `;
+        }
+      }
+
+      return { seasonId: newSeason.id as string };
+    });
+
+    return jsonResponse({ season_id: result.seasonId }, 201);
+  } catch (err) {
+    if (err instanceof HttpError) return jsonResponse({ error: err.message }, err.status);
+    return jsonResponse({ error: err instanceof Error ? err.message : 'Internal error' }, 500);
+  }
 });

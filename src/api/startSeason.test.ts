@@ -130,4 +130,41 @@ describe('POST /functions/v1/start-season', () => {
     const newSeasonStatus = await dbClient.query(`select status from seasons where id = $1`, [newSeasonId]);
     expect(newSeasonStatus.rows[0].status).toBe('active');
   });
+
+  it('rejects a previous_season_id that does not reference an existing season', async () => {
+    const response = await fetch(`${status.API_URL}/functions/v1/start-season`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        new_season_name: 'Bad Previous Season Test',
+        start_date: '2026-05-01',
+        previous_season_id: '00000000-0000-0000-0000-000000000000',
+      }),
+    });
+    expect(response.status).toBe(400);
+
+    const orphan = await dbClient.query(`select id from seasons where name = $1`, ['Bad Previous Season Test']);
+    expect(orphan.rows.length).toBe(0);
+  });
+
+  it('completes any other active season when starting a new one, so only one season is ever active', async () => {
+    const first = await fetch(`${status.API_URL}/functions/v1/start-season`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_season_name: 'Single Active Season Test 1', start_date: '2026-06-01' }),
+    });
+    const { season_id: firstSeasonId } = await first.json();
+
+    await fetch(`${status.API_URL}/functions/v1/start-season`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_season_name: 'Single Active Season Test 2', start_date: '2026-06-08' }),
+    });
+
+    const activeSeasons = await dbClient.query(`select id from seasons where status = 'active'`);
+    expect(activeSeasons.rows.length).toBe(1);
+
+    const firstSeasonStatus = await dbClient.query(`select status from seasons where id = $1`, [firstSeasonId]);
+    expect(firstSeasonStatus.rows[0].status).toBe('completed');
+  });
 });
