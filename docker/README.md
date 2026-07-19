@@ -33,8 +33,16 @@ end-to-end on this stack.
 
 **Ports in use:** if `up` fails with a "port is already allocated" error for
 8080 or 8000, something else on your machine is already using that port --
-edit the left-hand side of the corresponding `ports:` mapping in
-`docker-compose.yml` (e.g. `"8081:80"`) and adjust the URLs above to match.
+edit the host-port field of the corresponding `ports:` mapping in
+`docker-compose.yml` (e.g. `"127.0.0.1:8081:80"`) and adjust the URLs above to
+match.
+
+**Network exposure:** both published ports bind to `127.0.0.1` only, so the
+stack is reachable from this machine but not from other devices on the same
+network -- a deliberate default for a single-trusted-machine dev stack that
+has no TLS or reverse proxy. If you genuinely want LAN access, drop the
+`127.0.0.1:` prefix from the `ports:` mapping (e.g. `"8080:80"`) so it binds
+all interfaces again.
 
 **Re-seeding:** `scripts/seed-selfhost.mjs` always inserts new rows -- running
 it twice against the same stack duplicates the demo data (you'll see doubled
@@ -44,7 +52,9 @@ leaderboard ranks). Tear down with `-v` (see below) before re-seeding.
 
 - [ ] `docker compose --env-file .env.selfhost ps` shows all 9 services
       (db, auth, rest, kong, frontend, fn-enter-match, fn-correct-match,
-      fn-close-week, fn-start-season) as `Up`/`healthy`.
+      fn-close-week, fn-start-season) as `Up`. Only `db` and `kong` have
+      healthchecks, so only those two additionally show `healthy`; the other
+      seven have no healthcheck and stay at plain `Up`.
 - [ ] http://localhost:8080/ shows the seeded leaderboard.
 - [ ] http://localhost:8080/players/<a-seeded-player-id> shows that player's
       profile.
@@ -56,17 +66,26 @@ leaderboard ranks). Tear down with `-v` (see below) before re-seeding.
 
 ## Tearing down
 
+Stop the stack but keep its data -- the named `pgdata` volume persists, so the
+next `up` resumes from the same database:
+
+```
+docker compose --env-file .env.selfhost down
+```
+
+Stop the stack **and** wipe its data -- `-v` removes the `pgdata` volume, so
+the next `up` starts from a fresh database and re-applies migrations:
+
 ```
 docker compose --env-file .env.selfhost down -v
 ```
 
-`-v` also removes the Postgres data volume -- the next `up` starts from a
-fresh database and re-applies migrations.
-
 ## Security note
 
 `.env.selfhost` holds dev-grade secrets (JWT signing secret, Postgres
-password, anon/service-role keys) generated for local use. **Rotate all of
+superuser password, the `supabase_auth_admin` (`AUTH_DB_PASSWORD`) and
+`authenticator` (`AUTHENTICATOR_DB_PASSWORD`) per-role database passwords, and
+anon/service-role keys) generated for local use. **Rotate all of
 them** before ever pointing this stack at a real, internet-facing host --
 this phase deliberately has no TLS or reverse proxy, so it should only run on
 a trusted local/private network until a hosting decision is made.

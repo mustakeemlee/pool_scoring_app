@@ -9,6 +9,10 @@ services:
           - /auth/v1/verify
     plugins:
       - name: cors
+        config:
+          origins:
+            - http://localhost:8080
+            - http://127.0.0.1:8080
   - name: auth-v1-open-callback
     url: http://auth:9999/callback
     routes:
@@ -18,6 +22,10 @@ services:
           - /auth/v1/callback
     plugins:
       - name: cors
+        config:
+          origins:
+            - http://localhost:8080
+            - http://127.0.0.1:8080
   - name: auth-v1-open-authorize
     url: http://auth:9999/authorize
     routes:
@@ -27,6 +35,10 @@ services:
           - /auth/v1/authorize
     plugins:
       - name: cors
+        config:
+          origins:
+            - http://localhost:8080
+            - http://127.0.0.1:8080
   - name: auth-v1
     url: http://auth:9999/
     routes:
@@ -36,6 +48,10 @@ services:
           - /auth/v1/
     plugins:
       - name: cors
+        config:
+          origins:
+            - http://localhost:8080
+            - http://127.0.0.1:8080
   - name: rest-v1
     url: http://rest:3000/
     routes:
@@ -45,6 +61,10 @@ services:
           - /rest/v1/
     plugins:
       - name: cors
+        config:
+          origins:
+            - http://localhost:8080
+            - http://127.0.0.1:8080
   - name: functions-v1-enter-match
     url: http://fn-enter-match:9000/
     routes:
@@ -54,6 +74,10 @@ services:
           - /functions/v1/enter-match
     plugins:
       - name: cors
+        config:
+          origins:
+            - http://localhost:8080
+            - http://127.0.0.1:8080
   - name: functions-v1-correct-match
     url: http://fn-correct-match:9000/
     routes:
@@ -63,6 +87,10 @@ services:
           - /functions/v1/correct-match
     plugins:
       - name: cors
+        config:
+          origins:
+            - http://localhost:8080
+            - http://127.0.0.1:8080
   - name: functions-v1-close-week
     url: http://fn-close-week:9000/
     routes:
@@ -72,6 +100,10 @@ services:
           - /functions/v1/close-week
     plugins:
       - name: cors
+        config:
+          origins:
+            - http://localhost:8080
+            - http://127.0.0.1:8080
   - name: functions-v1-start-season
     url: http://fn-start-season:9000/
     routes:
@@ -81,3 +113,7 @@ services:
           - /functions/v1/start-season
     plugins:
       - name: cors
+        config:
+          origins:
+            - http://localhost:8080
+            - http://127.0.0.1:8080

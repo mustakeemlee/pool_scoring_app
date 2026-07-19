@@ -1,9 +1,8 @@
 #!/bin/sh
 set -e
 psql -v ON_ERROR_STOP=1 --no-password --no-psqlrc -U supabase_admin -d "$POSTGRES_DB" <<-EOSQL
-  ALTER ROLE authenticator WITH PASSWORD '$POSTGRES_PASSWORD';
-  ALTER ROLE supabase_auth_admin WITH PASSWORD '$POSTGRES_PASSWORD';
-  ALTER ROLE supabase_storage_admin WITH PASSWORD '$POSTGRES_PASSWORD';
+  ALTER ROLE authenticator WITH PASSWORD '$AUTHENTICATOR_DB_PASSWORD';
+  ALTER ROLE supabase_auth_admin WITH PASSWORD '$AUTH_DB_PASSWORD';
   DO \$\$
   DECLARE
     r record;

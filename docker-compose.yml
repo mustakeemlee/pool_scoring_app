@@ -1,22 +1,33 @@
 services:
   db:
     image: public.ecr.aws/supabase/postgres:17.6.1.143
+    restart: unless-stopped
     environment:
       POSTGRES_USER: supabase_admin
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
       JWT_SECRET: ${JWT_SECRET}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
+      AUTHENTICATOR_DB_PASSWORD: ${AUTHENTICATOR_DB_PASSWORD}
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "supabase_admin"]
+      test: ["CMD", "pg_isready", "-U", "supabase_admin", "-d", "postgres"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 60s
     volumes:
+      - pgdata:/var/lib/postgresql/data
       - ./supabase/migrations:/docker-entrypoint-initdb.d/migrations:ro
       - ./docker/db-init/zz-set-role-passwords.sh:/docker-entrypoint-initdb.d/zz-set-role-passwords.sh:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   auth:
     image: public.ecr.aws/supabase/gotrue:v2.192.0
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -25,32 +36,44 @@ services:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: "9999"
       GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgresql://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_DB_DATABASE_URL: postgresql://supabase_auth_admin:${AUTH_DB_PASSWORD}@db:5432/postgres
       GOTRUE_SITE_URL: http://localhost:8080
       GOTRUE_URI_ALLOW_LIST: http://localhost:8080,http://localhost:8080/admin/reset-password
       GOTRUE_JWT_SECRET: ${JWT_SECRET}
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
       GOTRUE_JWT_EXP: "3600"
-      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_DISABLE_SIGNUP: "true"
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_MAILER_AUTOCONFIRM: "true"
       GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   rest:
     image: public.ecr.aws/supabase/postgrest:v14.14
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
-      PGRST_DB_URI: postgresql://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_URI: postgresql://authenticator:${AUTHENTICATOR_DB_PASSWORD}@db:5432/postgres
       PGRST_DB_SCHEMAS: public
       PGRST_DB_ANON_ROLE: anon
       PGRST_JWT_SECRET: ${JWT_SECRET}
       PGRST_DB_MAX_ROWS: "1000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   kong:
     image: public.ecr.aws/supabase/kong:2.8.1
+    restart: unless-stopped
     depends_on:
       - auth
       - rest
@@ -60,7 +83,12 @@ services:
     volumes:
       - ./docker/kong.yml:/home/kong/kong.yml:ro
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     build:
@@ -69,11 +97,18 @@ services:
       args:
         VITE_SUPABASE_URL: http://localhost:8000
         VITE_SUPABASE_ANON_KEY: ${ANON_KEY}
+    restart: unless-stopped
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   fn-enter-match:
     image: public.ecr.aws/supabase/edge-runtime:v1.74.2
+    restart: unless-stopped
     command: ["start", "--main-service", "/functions/enter-match", "--port", "9000"]
     depends_on:
       db:
@@ -84,9 +119,15 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
     volumes:
       - ./supabase/functions:/functions:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   fn-correct-match:
     image: public.ecr.aws/supabase/edge-runtime:v1.74.2
+    restart: unless-stopped
     command: ["start", "--main-service", "/functions/correct-match", "--port", "9000"]
     depends_on:
       db:
@@ -97,9 +138,15 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
     volumes:
       - ./supabase/functions:/functions:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   fn-close-week:
     image: public.ecr.aws/supabase/edge-runtime:v1.74.2
+    restart: unless-stopped
     command: ["start", "--main-service", "/functions/close-week", "--port", "9000"]
     depends_on:
       db:
@@ -110,9 +157,15 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
     volumes:
       - ./supabase/functions:/functions:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   fn-start-season:
     image: public.ecr.aws/supabase/edge-runtime:v1.74.2
+    restart: unless-stopped
     command: ["start", "--main-service", "/functions/start-season", "--port", "9000"]
     depends_on:
       db:
@@ -123,3 +176,11 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
     volumes:
       - ./supabase/functions:/functions:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata:
