@@ -19,7 +19,7 @@ export function usePlayerProfile(playerId: string | undefined, seasonId: string 
     queryKey: queryKeys.playerProfile(playerId ?? '', seasonId ?? ''),
     queryFn: async (): Promise<PlayerProfileData> => {
       const [playerRes, ratingRes, statsRes, eventsRes, matchesRes] = await Promise.all([
-        supabase.from('players').select('id, full_name').eq('id', playerId as string).single(),
+        supabase.from('players').select('id, full_name, photo_url').eq('id', playerId as string).single(),
         supabase
           .from('player_season_ratings')
           .select('*')
@@ -39,7 +39,7 @@ export function usePlayerProfile(playerId: string | undefined, seasonId: string 
           .eq('season_id', seasonId as string),
         supabase
           .from('matches')
-          .select('*, player_a:player_a_id(id, full_name), player_b:player_b_id(id, full_name)')
+          .select('*, player_a:player_a_id(id, full_name, photo_url), player_b:player_b_id(id, full_name, photo_url)')
           .eq('season_id', seasonId as string)
           .eq('is_voided', false)
           .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)

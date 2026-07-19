@@ -5,6 +5,7 @@ export type Grade = 'A+' | 'A' | 'B+' | 'B' | 'C+' | 'C' | 'D';
 export interface LeaderboardEntry {
   player_id: string;
   full_name: string;
+  photo_url?: string | null;
   season_id: string;
   rating: number;
   grade: Grade;
@@ -65,6 +66,7 @@ export interface RatingEvent {
 export interface PlayerSummary {
   id: string;
   full_name: string;
+  photo_url?: string | null;
 }
 
 export interface MatchRow {

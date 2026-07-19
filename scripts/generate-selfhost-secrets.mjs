@@ -6,11 +6,15 @@
 // already-issued GoTrue sessions and the anon/service keys baked into an
 // already-built frontend image.
 import { randomBytes, createHmac } from 'node:crypto';
-import { writeFileSync, existsSync } from 'node:fs';
+import { writeFileSync, existsSync, readFileSync, appendFileSync } from 'node:fs';
 
 const outputPath = '.env.selfhost';
-if (existsSync(outputPath)) {
-  console.error(`${outputPath} already exists -- refusing to overwrite. Delete it first if you want to regenerate.`);
+const appendMissing = process.argv.includes('--append-missing');
+if (existsSync(outputPath) && !appendMissing) {
+  console.error(
+    `${outputPath} already exists -- refusing to overwrite. ` +
+      'Delete it first to regenerate, or run with --append-missing to add newly required keys only.',
+  );
   process.exit(1);
 }
 
@@ -44,6 +48,9 @@ const authenticatorDbPassword = base64url(randomBytes(24));
 // NOLOGIN by default, so the db-init script also grants it LOGIN. base64url for
 // the same URL-safety reason as the passwords above.
 const serviceRoleDbPassword = base64url(randomBytes(24));
+// STORAGE_DB_PASSWORD -> supabase_storage_admin, used by the storage-api
+// container for player photo uploads. base64url for URL-safety.
+const storageDbPassword = base64url(randomBytes(24));
 const nowSeconds = Math.floor(Date.now() / 1000);
 const expSeconds = nowSeconds + 10 * 365 * 24 * 3600; // 10 years -- dev-grade, rotate before real hosting
 
@@ -60,9 +67,33 @@ POSTGRES_PASSWORD=${postgresPassword}
 AUTH_DB_PASSWORD=${authDbPassword}
 AUTHENTICATOR_DB_PASSWORD=${authenticatorDbPassword}
 SERVICE_ROLE_DB_PASSWORD=${serviceRoleDbPassword}
+STORAGE_DB_PASSWORD=${storageDbPassword}
 ANON_KEY=${anonKey}
 SERVICE_ROLE_KEY=${serviceRoleKey}
+# LAN/prod: set to the URL league members use, e.g. http://192.168.1.50:8080
+PUBLIC_APP_URL=http://localhost:8080
 `;
+
+if (appendMissing) {
+  const existing = readFileSync(outputPath, 'utf-8');
+  const has = (key) => new RegExp(`^${key}=`, 'm').test(existing);
+  let appended = 0;
+  if (!has('STORAGE_DB_PASSWORD')) {
+    appendFileSync(outputPath, `STORAGE_DB_PASSWORD=${storageDbPassword}\n`);
+    console.log('Appended STORAGE_DB_PASSWORD');
+    appended++;
+  }
+  if (!has('PUBLIC_APP_URL')) {
+    appendFileSync(
+      outputPath,
+      '# LAN/prod: set to the URL league members use, e.g. http://192.168.1.50:8080\nPUBLIC_APP_URL=http://localhost:8080\n',
+    );
+    console.log('Appended PUBLIC_APP_URL (edit it to your LAN address)');
+    appended++;
+  }
+  console.log(appended === 0 ? 'Nothing to append -- all keys present.' : `Done -- ${appended} key(s) appended.`);
+  process.exit(0);
+}
 
 writeFileSync(outputPath, content);
 console.log(`Wrote ${outputPath}`);

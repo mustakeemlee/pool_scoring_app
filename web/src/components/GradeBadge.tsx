@@ -16,7 +16,7 @@ export function GradeBadge({ grade }: { grade: Grade }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold',
+        'inline-flex min-w-[2.25rem] items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-extrabold tracking-wide shadow-sm',
         GRADE_COLORS[grade],
       )}
     >

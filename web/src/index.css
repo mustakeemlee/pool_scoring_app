@@ -4,24 +4,26 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+    /* FPL-inspired dark theme: deep purple base, electric green primary,
+       cyan accent, magenta-to-cyan gradients */
+    --background: 291 100% 11%;
+    --foreground: 0 0% 100%;
+    --card: 290 62% 16%;
+    --card-foreground: 0 0% 100%;
+    --primary: 152 100% 50%;
+    --primary-foreground: 291 100% 11%;
+    --secondary: 289 50% 22%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 289 45% 20%;
+    --muted-foreground: 287 22% 74%;
+    --accent: 183 98% 51%;
+    --accent-foreground: 291 100% 11%;
+    --destructive: 349 100% 64%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 290 45% 26%;
+    --input: 290 45% 26%;
+    --ring: 152 100% 50%;
+    --radius: 0.75rem;
   }
 }
 
@@ -29,7 +31,42 @@
   * {
     @apply border-border;
   }
+  html {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    background-image:
+      radial-gradient(1200px 500px at 85% -10%, hsl(268 100% 40% / 0.35), transparent 60%),
+      radial-gradient(900px 420px at -10% 0%, hsl(183 98% 40% / 0.18), transparent 55%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  /* Signature FPL banner gradient */
+  .fpl-gradient {
+    background-image: linear-gradient(96deg, #963cff 0%, #ff2882 52%, #04f5ff 100%);
+  }
+  .fpl-gradient-soft {
+    background-image: linear-gradient(96deg, hsl(268 100% 62% / 0.25) 0%, hsl(335 100% 58% / 0.2) 52%, hsl(183 98% 51% / 0.25) 100%);
+  }
+  .fpl-gradient-text {
+    background-image: linear-gradient(96deg, #00ff87 0%, #04f5ff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .fpl-glow-green {
+    box-shadow: 0 0 24px hsl(152 100% 50% / 0.25);
+  }
+  .card-surface {
+    @apply rounded-xl border border-white/10 bg-card/80 backdrop-blur-sm;
   }
 }

@@ -28,16 +28,18 @@ export function ForgotPasswordPage() {
 
   if (sent) {
     return (
-      <div className="mx-auto max-w-sm">
-        <h1 className="mb-4 text-xl font-bold">Forgot Password</h1>
+      <div className="card-surface mx-auto mt-8 max-w-sm p-8">
+        <div className="fpl-gradient mb-6 h-1 w-12 rounded-full" />
+      <h1 className="mb-6 text-2xl font-extrabold">Forgot Password</h1>
         <p className="text-sm">Check your email for a password reset link.</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-sm">
-      <h1 className="mb-4 text-xl font-bold">Forgot Password</h1>
+    <div className="card-surface mx-auto mt-8 max-w-sm p-8">
+      <div className="fpl-gradient mb-6 h-1 w-12 rounded-full" />
+      <h1 className="mb-6 text-2xl font-extrabold">Forgot Password</h1>
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <div>
           <Label htmlFor="email">Email</Label>

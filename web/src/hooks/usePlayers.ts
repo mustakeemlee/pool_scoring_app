@@ -7,6 +7,7 @@ export interface PlayerOption {
   id: string;
   full_name: string;
   rating: number;
+  photo_url?: string | null;
 }
 
 export function usePlayers(seasonId: string | undefined) {
@@ -14,7 +15,7 @@ export function usePlayers(seasonId: string | undefined) {
     queryKey: queryKeys.players(seasonId ?? ''),
     queryFn: async (): Promise<PlayerOption[]> => {
       const [playersRes, ratingsRes] = await Promise.all([
-        supabase.from('players').select('id, full_name').eq('is_active', true).order('full_name', { ascending: true }),
+        supabase.from('players').select('id, full_name, photo_url').eq('is_active', true).order('full_name', { ascending: true }),
         supabase.from('player_season_ratings').select('player_id, rating').eq('season_id', seasonId as string),
       ]);
       if (playersRes.error) throw playersRes.error;
@@ -23,9 +24,10 @@ export function usePlayers(seasonId: string | undefined) {
       const ratingByPlayerId = new Map(
         (ratingsRes.data as { player_id: string; rating: number }[]).map((r) => [r.player_id, r.rating]),
       );
-      return (playersRes.data as { id: string; full_name: string }[]).map((player) => ({
+      return (playersRes.data as { id: string; full_name: string; photo_url: string | null }[]).map((player) => ({
         id: player.id,
         full_name: player.full_name,
+        photo_url: player.photo_url,
         rating: ratingByPlayerId.get(player.id) ?? 1500,
       }));
     },

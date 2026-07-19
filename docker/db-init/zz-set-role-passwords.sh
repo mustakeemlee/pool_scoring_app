@@ -4,6 +4,7 @@ psql -v ON_ERROR_STOP=1 --no-password --no-psqlrc -U supabase_admin -d "$POSTGRE
   ALTER ROLE authenticator WITH PASSWORD '$AUTHENTICATOR_DB_PASSWORD';
   ALTER ROLE supabase_auth_admin WITH PASSWORD '$AUTH_DB_PASSWORD';
   ALTER ROLE service_role WITH LOGIN PASSWORD '$SERVICE_ROLE_DB_PASSWORD';
+  ALTER ROLE supabase_storage_admin WITH LOGIN PASSWORD '$STORAGE_DB_PASSWORD';
   DO \$\$
   DECLARE
     r record;

@@ -33,8 +33,8 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <div className="mx-auto max-w-sm">
-      <h1 className="mb-4 text-xl font-bold">Reset Password</h1>
+    <div className="card-surface mx-auto mt-8 max-w-sm p-8">
+      <h1 className="mb-6 text-2xl font-extrabold">Reset Password</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
           <Label htmlFor="password">New password</Label>

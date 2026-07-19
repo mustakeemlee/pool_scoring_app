@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { MatchTable } from './MatchTable';
 import type { MatchRow } from '@/lib/types';
 
@@ -36,7 +37,7 @@ const matches: MatchRow[] = [
 
 describe('MatchTable', () => {
   it('renders one row per match with date, players, and score', () => {
-    render(<MatchTable matches={matches} />);
+    render(<MatchTable matches={matches} />, { wrapper: MemoryRouter });
     expect(screen.getByText('2026-01-22')).toBeInTheDocument();
     expect(screen.getByText('Alex Testplayer')).toBeInTheDocument();
     expect(screen.getByText('Jordan Testplayer')).toBeInTheDocument();
@@ -44,7 +45,7 @@ describe('MatchTable', () => {
   });
 
   it('marks voided matches so they are visually distinguishable', () => {
-    render(<MatchTable matches={matches} />);
+    render(<MatchTable matches={matches} />, { wrapper: MemoryRouter });
     const voidedRow = screen.getByText('Sam Testplayer').closest('tr');
     expect(voidedRow).not.toBeNull();
     expect(voidedRow).toHaveTextContent('voided');
@@ -52,7 +53,7 @@ describe('MatchTable', () => {
   });
 
   it('renders an empty state when there are no matches', () => {
-    render(<MatchTable matches={[]} />);
+    render(<MatchTable matches={[]} />, { wrapper: MemoryRouter });
     expect(screen.getByText('No matches yet.')).toBeInTheDocument();
   });
 });

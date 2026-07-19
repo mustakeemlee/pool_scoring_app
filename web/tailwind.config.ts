@@ -9,7 +9,18 @@ export default {
       padding: '1.5rem',
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+      },
       colors: {
+        fpl: {
+          purple: '#37003C',
+          dark: '#23003A',
+          green: '#00FF87',
+          cyan: '#04F5FF',
+          magenta: '#FF2882',
+          violet: '#963CFF',
+        },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',

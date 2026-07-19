@@ -92,14 +92,38 @@ them** before ever pointing this stack at a real, internet-facing host --
 this phase deliberately has no TLS or reverse proxy, so it should only run on
 a trusted local/private network until a hosting decision is made.
 
-**Rotating secrets (or upgrading an existing stack onto this version) requires
-a full reset, not just editing `.env.selfhost`.** The per-role database
-passwords are only ever applied by `docker/db-init/zz-set-role-passwords.sh`,
-which -- like all `docker-entrypoint-initdb.d` scripts -- only runs the very
-first time a fresh `pgdata` volume is initialized. Regenerating `.env.selfhost`
-(or hand-editing it) and running `up` again does **not** re-apply the new
-passwords to the existing roles, since the volume already exists; the services
-would then present new passwords against roles still holding the old ones and
-fail to connect. To actually rotate, or to pick up this change on a volume
-created before it existed: `docker compose --env-file .env.selfhost down -v`
-(destroys data), delete and regenerate `.env.selfhost`, then `up` again fresh.
+
+## Production runbook (2026-07-19 update)
+
+This stack is now the production runtime: LAN-ready, with photo storage and
+in-place migrations.
+
+### Upgrading an EXISTING stack to this version (no data loss)
+
+```powershell
+node scripts/generate-selfhost-secrets.mjs --append-missing   # adds STORAGE_DB_PASSWORD + PUBLIC_APP_URL
+# edit .env.selfhost: set PUBLIC_APP_URL to http://<your-PC-IP>:8080
+docker compose --env-file .env.selfhost up -d --build          # new frontend + storage service
+node scripts/migrate-selfhost.mjs --baseline-through 20260717000000_audit_fixes.sql
+```
+
+The baseline flag is needed ONCE, only because this database was created by
+the initdb mount before the migration tracker existed. After that, plain
+`node scripts/migrate-selfhost.mjs` applies anything new.
+
+### Fresh install
+
+Same as first-time setup above -- migrations all apply at initdb, then run
+`node scripts/migrate-selfhost.mjs --baseline-through <newest migration file>`
+once so the tracker knows the initdb state.
+
+### LAN access
+
+- Frontend binds 0.0.0.0:8080; give league members `http://<your-PC-IP>:8080`.
+- The frontend nginx proxies /rest, /auth, /storage and /functions to Kong on
+  the same origin, so no other port needs to be exposed and an IP change
+  doesn't break the built frontend.
+- Kong (8000) stays bound to 127.0.0.1 -- it's only needed locally by the
+  seed script.
+- Windows Firewall will prompt the first time; allow port 8080 on private
+  networks.

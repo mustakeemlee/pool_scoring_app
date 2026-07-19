@@ -10,7 +10,7 @@ export function useMatchHistory(seasonId: string | undefined) {
     queryFn: async (): Promise<MatchRow[]> => {
       const { data, error } = await supabase
         .from('matches')
-        .select('*, player_a:player_a_id(id, full_name), player_b:player_b_id(id, full_name)')
+        .select('*, player_a:player_a_id(id, full_name, photo_url), player_b:player_b_id(id, full_name, photo_url)')
         .eq('season_id', seasonId as string)
         .order('match_date', { ascending: false });
       if (error) throw error;

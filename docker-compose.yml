@@ -10,6 +10,7 @@ services:
       AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
       AUTHENTICATOR_DB_PASSWORD: ${AUTHENTICATOR_DB_PASSWORD}
       SERVICE_ROLE_DB_PASSWORD: ${SERVICE_ROLE_DB_PASSWORD}
+      STORAGE_DB_PASSWORD: ${STORAGE_DB_PASSWORD}
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "supabase_admin", "-d", "postgres"]
       interval: 5s
@@ -33,13 +34,13 @@ services:
       db:
         condition: service_healthy
     environment:
-      API_EXTERNAL_URL: http://localhost:8000
+      API_EXTERNAL_URL: ${PUBLIC_APP_URL:-http://localhost:8080}
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: "9999"
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgresql://supabase_auth_admin:${AUTH_DB_PASSWORD}@db:5432/postgres
-      GOTRUE_SITE_URL: http://localhost:8080
-      GOTRUE_URI_ALLOW_LIST: http://localhost:8080,http://localhost:8080/admin/reset-password
+      GOTRUE_SITE_URL: ${PUBLIC_APP_URL:-http://localhost:8080}
+      GOTRUE_URI_ALLOW_LIST: ${PUBLIC_APP_URL:-http://localhost:8080},${PUBLIC_APP_URL:-http://localhost:8080}/admin/reset-password,http://localhost:8080,http://localhost:8080/admin/reset-password
       GOTRUE_JWT_SECRET: ${JWT_SECRET}
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
@@ -96,11 +97,43 @@ services:
       context: .
       dockerfile: web/Dockerfile
       args:
-        VITE_SUPABASE_URL: http://localhost:8000
+        # Empty on purpose: the frontend nginx proxies /rest, /auth, /storage
+        # and /functions to Kong on the SAME origin, so the app works from any
+        # device on the LAN regardless of this machine's IP.
+        VITE_SUPABASE_URL: ""
         VITE_SUPABASE_ANON_KEY: ${ANON_KEY}
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:80"
+      - "8080:80"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  storage:
+    image: public.ecr.aws/supabase/storage-api:v1.67.5
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_started
+    environment:
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://rest:3000
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgresql://supabase_storage_admin:${STORAGE_DB_PASSWORD}@db:5432/postgres
+      FILE_SIZE_LIMIT: "52428800"
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: pool-league
+      REGION: local
+      GLOBAL_S3_BUCKET: local
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+    volumes:
+      - storage-data:/var/lib/storage
     logging:
       driver: json-file
       options:
@@ -189,3 +222,4 @@ services:
 
 volumes:
   pgdata:
+  storage-data:

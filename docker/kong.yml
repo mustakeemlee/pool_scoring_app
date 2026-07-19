@@ -117,3 +117,16 @@ services:
           origins:
             - http://localhost:8080
             - http://127.0.0.1:8080
+  - name: storage-v1
+    url: http://storage:5000/
+    routes:
+      - name: storage-v1-all
+        strip_path: true
+        paths:
+          - /storage/v1/
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:8080
+            - http://127.0.0.1:8080

@@ -8,19 +8,23 @@ const links = [
   { to: '/admin/correct-match', label: 'Correct a Match' },
   { to: '/admin/close-week', label: 'Close Week' },
   { to: '/admin/start-season', label: 'Start Season' },
+  { to: '/admin/players', label: 'Players' },
 ];
 
 export function AdminSidebar() {
   return (
-    <aside className="w-48 shrink-0">
-      <p className="text-muted-foreground mb-2 text-xs uppercase">Admin</p>
+    <aside className="card-surface h-fit w-52 shrink-0 p-4">
+      <p className="text-accent mb-3 text-xs font-bold uppercase tracking-widest">Admin</p>
       <nav className="flex flex-col gap-1">
         {links.map((link) => (
           <NavLink
             key={link.to}
             to={link.to}
             className={({ isActive }) =>
-              cn('rounded px-2 py-1 text-sm hover:bg-muted', isActive && 'bg-muted font-medium')
+              cn(
+                'rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-white/10',
+                isActive && 'bg-primary text-primary-foreground hover:bg-primary',
+              )
             }
           >
             {link.label}
@@ -30,7 +34,7 @@ export function AdminSidebar() {
       <button
         type="button"
         onClick={() => supabase.auth.signOut()}
-        className="text-muted-foreground hover:text-foreground mt-4 text-sm"
+        className="text-muted-foreground hover:text-destructive mt-6 text-sm font-medium transition-colors"
       >
         Logout
       </button>

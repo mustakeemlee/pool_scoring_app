@@ -9,7 +9,7 @@ export function GradeDistributionPage() {
   const distribution = useGradeDistribution(activeSeason.data?.id);
 
   if (activeSeason.isLoading || distribution.isLoading) {
-    return <Skeleton className="h-64 w-full" />;
+    return <Skeleton className="h-64 w-full rounded-xl" />;
   }
 
   if (activeSeason.isError || distribution.isError) {
@@ -21,21 +21,25 @@ export function GradeDistributionPage() {
 
   return (
     <div>
-      <p className="text-muted-foreground text-sm">{activeSeason.data?.name}</p>
-      <h1 className="mb-4 text-xl font-bold">Grade Distribution</h1>
-      <div className="flex flex-col gap-2">
+      <div className="fpl-gradient-soft mb-6 rounded-2xl border border-white/10 px-6 py-8">
+        <p className="text-sm font-semibold uppercase tracking-widest text-accent">
+          {activeSeason.data?.name}
+        </p>
+        <h1 className="text-3xl font-extrabold sm:text-4xl">Grade Distribution</h1>
+      </div>
+      <div className="card-surface flex flex-col gap-4 p-6">
         {rows.map((row) => (
-          <div key={row.grade} className="flex items-center gap-3">
+          <div key={row.grade} className="flex items-center gap-4">
             <div className="w-10">
               <GradeBadge grade={row.grade} />
             </div>
-            <div className="bg-muted h-4 flex-1 overflow-hidden rounded">
+            <div className="h-5 flex-1 overflow-hidden rounded-full bg-white/5">
               <div
-                className="h-full bg-primary"
+                className="fpl-gradient h-full rounded-full transition-[width] duration-500"
                 style={{ width: `${(row.player_count / maxCount) * 100}%` }}
               />
             </div>
-            <span className="w-8 text-right text-sm">{row.player_count}</span>
+            <span className="w-8 text-right text-sm font-bold tabular-nums">{row.player_count}</span>
           </div>
         ))}
       </div>
