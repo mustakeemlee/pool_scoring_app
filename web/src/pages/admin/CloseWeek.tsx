@@ -23,7 +23,6 @@ export function CloseWeekPage() {
   const [result, setResult] = useState<CloseWeekResponse | null>(null);
 
   const matchesInWeek = (openMatches.data ?? []).filter((match) => match.match_date <= weekEnding);
-  const playerCount = new Set(matchesInWeek.flatMap((match) => [match.player_a_id, match.player_b_id])).size;
 
   async function handleConfirm() {
     if (!activeSeason.data) return;
@@ -73,7 +72,7 @@ export function CloseWeekPage() {
             </Button>
           }
           title={`Close the week ending ${weekEnding}?`}
-          description={`This locks ${matchesInWeek.length} match(es) and runs Glicko-2 reconciliation for ${playerCount} player(s). This cannot be undone.`}
+          description="This locks every open match on or before this date and runs Glicko-2 reconciliation for every player involved. This cannot be undone."
           confirmLabel="Confirm Close Week"
           onConfirm={handleConfirm}
           isConfirming={isClosing}
