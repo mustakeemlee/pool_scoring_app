@@ -83,9 +83,11 @@ docker compose --env-file .env.selfhost down -v
 ## Security note
 
 `.env.selfhost` holds dev-grade secrets (JWT signing secret, Postgres
-superuser password, the `supabase_auth_admin` (`AUTH_DB_PASSWORD`) and
-`authenticator` (`AUTHENTICATOR_DB_PASSWORD`) per-role database passwords, and
-anon/service-role keys) generated for local use. **Rotate all of
+superuser password, the `supabase_auth_admin` (`AUTH_DB_PASSWORD`),
+`authenticator` (`AUTHENTICATOR_DB_PASSWORD`) and `service_role`
+(`SERVICE_ROLE_DB_PASSWORD`, used by the function containers' direct Postgres
+connection) per-role database passwords, and anon/service-role keys) generated
+for local use. **Rotate all of
 them** before ever pointing this stack at a real, internet-facing host --
 this phase deliberately has no TLS or reverse proxy, so it should only run on
 a trusted local/private network until a hosting decision is made.

@@ -9,6 +9,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
       AUTHENTICATOR_DB_PASSWORD: ${AUTHENTICATOR_DB_PASSWORD}
+      SERVICE_ROLE_DB_PASSWORD: ${SERVICE_ROLE_DB_PASSWORD}
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "supabase_admin", "-d", "postgres"]
       interval: 5s
@@ -117,6 +118,7 @@ services:
       SUPABASE_URL: http://kong:8000
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      SUPABASE_DB_URL: postgresql://service_role:${SERVICE_ROLE_DB_PASSWORD}@db:5432/postgres
     volumes:
       - ./supabase/functions:/functions:ro
     logging:
@@ -136,6 +138,7 @@ services:
       SUPABASE_URL: http://kong:8000
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      SUPABASE_DB_URL: postgresql://service_role:${SERVICE_ROLE_DB_PASSWORD}@db:5432/postgres
     volumes:
       - ./supabase/functions:/functions:ro
     logging:
@@ -155,6 +158,7 @@ services:
       SUPABASE_URL: http://kong:8000
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      SUPABASE_DB_URL: postgresql://service_role:${SERVICE_ROLE_DB_PASSWORD}@db:5432/postgres
     volumes:
       - ./supabase/functions:/functions:ro
     logging:
@@ -174,6 +178,7 @@ services:
       SUPABASE_URL: http://kong:8000
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      SUPABASE_DB_URL: postgresql://service_role:${SERVICE_ROLE_DB_PASSWORD}@db:5432/postgres
     volumes:
       - ./supabase/functions:/functions:ro
     logging:

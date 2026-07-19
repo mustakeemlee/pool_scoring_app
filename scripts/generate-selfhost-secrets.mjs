@@ -38,6 +38,12 @@ const postgresPassword = base64url(randomBytes(24));
 // same URL-safety reason as POSTGRES_PASSWORD above.
 const authDbPassword = base64url(randomBytes(24));
 const authenticatorDbPassword = base64url(randomBytes(24));
+// SERVICE_ROLE_DB_PASSWORD -> service_role's own direct-login password, used by
+// the four self-hosted Edge Function containers' SUPABASE_DB_URL for real
+// transactional writes (row-locking). service_role has BYPASSRLS but is
+// NOLOGIN by default, so the db-init script also grants it LOGIN. base64url for
+// the same URL-safety reason as the passwords above.
+const serviceRoleDbPassword = base64url(randomBytes(24));
 const nowSeconds = Math.floor(Date.now() / 1000);
 const expSeconds = nowSeconds + 10 * 365 * 24 * 3600; // 10 years -- dev-grade, rotate before real hosting
 
@@ -53,6 +59,7 @@ JWT_SECRET=${jwtSecret}
 POSTGRES_PASSWORD=${postgresPassword}
 AUTH_DB_PASSWORD=${authDbPassword}
 AUTHENTICATOR_DB_PASSWORD=${authenticatorDbPassword}
+SERVICE_ROLE_DB_PASSWORD=${serviceRoleDbPassword}
 ANON_KEY=${anonKey}
 SERVICE_ROLE_KEY=${serviceRoleKey}
 `;
