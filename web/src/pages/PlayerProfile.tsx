@@ -1,12 +1,14 @@
 // web/src/pages/PlayerProfile.tsx
+import { lazy, Suspense } from 'react';
 import { useParams } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GradeBadge } from '@/components/GradeBadge';
-import { RatingChart } from '@/components/RatingChart';
 import { useActiveSeason } from '@/hooks/useActiveSeason';
 import { usePlayerProfile } from '@/hooks/usePlayerProfile';
 import { toRatingHistoryPoints } from '@/lib/ratingHistory';
 import { toPlayerProfileMatches } from '@/lib/playerProfileMatches';
+
+const RatingChart = lazy(() => import('@/components/RatingChart').then((m) => ({ default: m.RatingChart })));
 
 function streakLabel(streak: number): string {
   if (streak === 0) return '—';
@@ -69,7 +71,9 @@ export function PlayerProfilePage() {
 
       <h2 className="mb-2 text-sm font-semibold uppercase text-muted-foreground">Rating history</h2>
       <div className="mb-6">
-        <RatingChart points={chartPoints} />
+        <Suspense fallback={<Skeleton className="h-[200px] w-full" />}>
+          <RatingChart points={chartPoints} />
+        </Suspense>
       </div>
 
       <h2 className="mb-2 text-sm font-semibold uppercase text-muted-foreground">Recent matches</h2>
