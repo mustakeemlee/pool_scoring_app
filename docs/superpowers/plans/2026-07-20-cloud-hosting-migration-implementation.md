@@ -208,13 +208,12 @@ Expected: lists all 9 files under `supabase/migrations/` as pending and applies 
 Run: `npx supabase functions deploy enter-match correct-match close-week start-season`
 Expected: each function reports a successful deploy with a dashboard URL. Confirm via Supabase dashboard → Edge Functions that all four show status "Deployed".
 
-- [ ] **Step 4: Set the `SUPABASE_DB_URL` function secret**
+- [ ] **Step 4: Confirm `SUPABASE_DB_URL` is already available to deployed functions**
 
-Run: `npx supabase secrets set SUPABASE_DB_URL="<paste the SUPABASE_DB_URL value from .env>"`
+**Correction found during execution, 2026-07-20:** the design spec (§4) assumed `SUPABASE_DB_URL` was the one credential Supabase Cloud does *not* auto-inject into deployed functions, requiring an explicit `supabase secrets set`. That's no longer true on the current platform. Running `npx supabase secrets set SUPABASE_DB_URL="..."` now fails outright: `Env name cannot start with SUPABASE_, skipping: SUPABASE_DB_URL` / `LegacySecretsNoArgumentsError` — the CLI blocks setting *any* `SUPABASE_*`-prefixed name because the platform now manages that whole prefix itself.
 
-(`SUPABASE_URL`/`SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY` are auto-injected by the platform already — do not set these as secrets, per design spec §4.)
-
-Expected: `Finished supabase secrets set.`
+Run: `npx supabase secrets list`
+Expected: `SUPABASE_DB_URL` already appears in the list (alongside `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and a few others: `SUPABASE_JWKS`, `SUPABASE_PUBLISHABLE_KEYS`, `SUPABASE_SECRET_KEYS`), each showing a hash instead of a plaintext value (platform-managed, not user-settable). No action needed — skip straight to Step 5's smoke test to confirm it's a *working* connection string, not just present.
 
 - [ ] **Step 5: Smoke-test one deployed function end-to-end**
 
@@ -226,6 +225,8 @@ curl -i -X POST "<SUPABASE_URL>/functions/v1/enter-match" \
   -d '{}'
 ```
 Expected: `401 Unauthorized` (proves `requireAdmin()` is live and the function is reachable — an empty/anon-keyed request must be rejected, not crash with a 500 from a missing `SUPABASE_DB_URL`).
+
+Since Step 4 changed from "set a secret" to "confirm one's already there," also do one authenticated round trip to prove the auto-injected `SUPABASE_DB_URL` is an actually-working connection string, not just present: provision a test admin (`auth.admin.createUser` + `admin_users` insert via the service-role key, same pattern as `provisionTestAdmin` in Task 4), sign in, create a season and two players directly via the service-role client, then `POST /functions/v1/enter-match` with a real payload and confirm `201` with a `match_id` in the response body — this exercises `withTransaction` in `_shared/dbTransaction.ts`, which is the actual consumer of `SUPABASE_DB_URL`. Delete everything created (season, players, the auth user) afterward — this is a manual one-off check, not a permanent test file.
 
 No commit for this task (no files changed).
 
@@ -2141,15 +2142,15 @@ locking plus atomic commit/rollback) instead of separate PostgREST calls via
 `supabase/functions/_shared/dbTransaction.ts`. This requires a
 `SUPABASE_DB_URL` env var to be visible to the function at runtime.
 
-Unlike `SUPABASE_URL`/`SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY` (which
-Supabase Cloud auto-injects into every deployed function), `SUPABASE_DB_URL`
-is **not** auto-injected and must be set explicitly, once, as a function
-secret using the Supavisor **transaction-mode** pooler connection string
-(Project Settings → Database → Connection string → Transaction pooler):
-
-```
-npx supabase secrets set SUPABASE_DB_URL="<transaction-pooler-connection-string>"
-```
+Supabase Cloud auto-injects `SUPABASE_DB_URL` into every deployed function
+today, alongside `SUPABASE_URL`/`SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY`
+— confirmed via `npx supabase secrets list`, which shows it as a
+platform-managed secret. The CLI actively refuses to let you set it yourself
+(`npx supabase secrets set SUPABASE_DB_URL=...` fails with "Env name cannot
+start with SUPABASE_, skipping"), so there's no manual step here. If a future
+platform change ever stops auto-injecting it, the value to set would be the
+Supavisor **transaction-mode** pooler connection string (Project Settings →
+Database → Connection string → Transaction pooler).
 
 ## Resolved history (worth knowing about)
 
