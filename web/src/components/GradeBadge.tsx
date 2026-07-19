@@ -4,7 +4,7 @@ import type { Grade } from '@/lib/types';
 
 const GRADE_COLORS: Record<Grade, string> = {
   'A+': 'bg-green-700 text-white',
-  A: 'bg-green-600 text-white',
+  A: 'bg-green-600 text-black',
   'B+': 'bg-lime-600 text-black',
   B: 'bg-yellow-500 text-black',
   'C+': 'bg-orange-500 text-black',
