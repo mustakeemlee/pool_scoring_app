@@ -319,6 +319,74 @@
 
 ---
 
+---
+
+### Task 4: Wire `SUPABASE_DB_URL` into the four function containers (gap found during Task 2)
+
+**Discovered mid-execution:** Task 2's implementer found that `scripts/seed-selfhost.mjs` fails at the first `enter-match` call with `"SUPABASE_DB_URL is not set"` — the Phase A backend-fixes branch (already merged to master) made every write-path Edge Function require a direct Postgres connection via `SUPABASE_DB_URL` for real transactions/row-locking, but this self-hosted docker-compose stack's four `fn-*` services were never given that variable. This is a real gap, not covered by this plan's original Tasks 1-3, and it means the self-hosted stack's admin write path (enter-match, correct-match, close-week, start-season) is currently completely broken, not just un-hardened.
+
+**Files:**
+- Modify: `docker-compose.yml` (already modified by Task 1 — this task builds on top of it, run this task AFTER Task 1 is committed, not in parallel)
+- Modify: `docker/db-init/zz-set-role-passwords.sh` (already modified by Task 1)
+- Modify: `scripts/generate-selfhost-secrets.mjs` (already modified by Task 1)
+- Modify: `.env.selfhost.example` (already modified by Task 1)
+- Modify: `docker/README.md` (already modified by Task 1)
+
+- [ ] **Step 1: Determine the right role for direct Postgres access from the function containers, empirically**
+
+  Do not assume — check the real running stack. `service_role` already has the correct table grants for everything these functions write (`select, insert, update, delete` on `players, seasons, player_season_ratings, matches, weekly_rankings, player_statistics, admin_users, match_audit_log, rating_events`, from `supabase/migrations/20260714040000_data_api_grants.sql`) and, per standard Supabase convention, should already have `BYPASSRLS` set — but confirm both facts against the actual container rather than trusting this description:
+  ```bash
+  docker compose --env-file .env.selfhost up -d db
+  docker compose --env-file .env.selfhost exec db psql -U supabase_admin -d postgres -c \
+    "select rolname, rolcanlogin, rolbypassrls from pg_roles where rolname = 'service_role';"
+  ```
+  Expect `rolbypassrls = t`. `rolcanlogin` will likely be `f` (PostgREST reaches it via its own internal role-switching from `authenticator`, not a direct password login) — if so, it needs `LOGIN` added.
+
+- [ ] **Step 2: Give `service_role` its own login password, distinct from every other role's**
+
+  In `scripts/generate-selfhost-secrets.mjs`, add one more secret:
+  ```js
+  const serviceRoleDbPassword = base64url(randomBytes(24));
+  ```
+  Add `SERVICE_ROLE_DB_PASSWORD=${serviceRoleDbPassword}` to the written `.env.selfhost` content, and the same key (empty) to `.env.selfhost.example`.
+
+  In `docker-compose.yml`, add `SERVICE_ROLE_DB_PASSWORD: ${SERVICE_ROLE_DB_PASSWORD}` to the `db` service's `environment:` block (alongside the two Task 1 already added), and add to `docker/db-init/zz-set-role-passwords.sh`:
+  ```sh
+  ALTER ROLE service_role WITH LOGIN PASSWORD '$SERVICE_ROLE_DB_PASSWORD';
+  ```
+  (If Step 1 found `rolcanlogin` already true, `WITH LOGIN PASSWORD '...'` still works — it just also ensures login stays enabled while setting the password. If Step 1 found `rolbypassrls` false, stop and flag this as a NEEDS_CONTEXT — that would mean this role isn't safe to use this way and the approach needs rethinking, don't proceed with a role that can't bypass RLS.)
+
+- [ ] **Step 3: Wire `SUPABASE_DB_URL` into all four function services**
+
+  In `docker-compose.yml`, add to each of `fn-enter-match`, `fn-correct-match`, `fn-close-week`, `fn-start-season`'s `environment:` block:
+  ```yaml
+  SUPABASE_DB_URL: postgresql://service_role:${SERVICE_ROLE_DB_PASSWORD}@db:5432/postgres
+  ```
+  (alongside the existing `SUPABASE_URL`/`SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY` already there for each).
+
+- [ ] **Step 4: Verify end-to-end against the real stack**
+
+  ```bash
+  rm -f .env.selfhost
+  node scripts/generate-selfhost-secrets.mjs
+  docker compose --env-file .env.selfhost up -d --build
+  node scripts/seed-selfhost.mjs
+  ```
+  Expected: the seed script now succeeds all the way through (season id + admin credentials printed), proving `enter-match`/`close-week` both work end-to-end through Kong → edge-runtime → the new direct Postgres connection → Postgres. Also spot-check `correct-match`/`start-season` directly via curl (mirroring the existing spec's own testing approach — the seed script's flow doesn't exercise those two). Tear down when done: `docker compose --env-file .env.selfhost down -v`.
+
+- [ ] **Step 5: Update `docker/README.md`**
+
+  Add `SERVICE_ROLE_DB_PASSWORD` to whatever sentence lists `.env.selfhost`'s contents (same spot Task 1 updated for the other two new secrets).
+
+- [ ] **Step 6: Commit**
+
+  ```bash
+  git add docker-compose.yml docker/db-init/zz-set-role-passwords.sh scripts/generate-selfhost-secrets.mjs .env.selfhost.example docker/README.md
+  git commit -m "fix: wire SUPABASE_DB_URL into the self-hosted function containers so the admin write path actually works"
+  ```
+
+---
+
 ## Execution notes for the controller
 
 - Task 1 is the only one that touches `docker-compose.yml`/`docker/kong.yml`/the db-init script — dispatch it alone first (or in parallel with Tasks 2/3, which touch entirely disjoint files and don't depend on Task 1's changes to implement, though Task 3's verification step needs a running stack which could come from either task's own bring-up).
