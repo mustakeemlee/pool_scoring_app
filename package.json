@@ -8,8 +8,6 @@
     "test:integration": "vitest run src/db",
     "test:api": "vitest run src/api",
     "test": "npm run test:unit && npm run test:integration && npm run test:api",
-    "supabase:start": "supabase start",
-    "supabase:stop": "supabase stop",
     "seed": "node scripts/seed.mjs"
   },
   "devDependencies": {
