@@ -91,3 +91,15 @@ for local use. **Rotate all of
 them** before ever pointing this stack at a real, internet-facing host --
 this phase deliberately has no TLS or reverse proxy, so it should only run on
 a trusted local/private network until a hosting decision is made.
+
+**Rotating secrets (or upgrading an existing stack onto this version) requires
+a full reset, not just editing `.env.selfhost`.** The per-role database
+passwords are only ever applied by `docker/db-init/zz-set-role-passwords.sh`,
+which -- like all `docker-entrypoint-initdb.d` scripts -- only runs the very
+first time a fresh `pgdata` volume is initialized. Regenerating `.env.selfhost`
+(or hand-editing it) and running `up` again does **not** re-apply the new
+passwords to the existing roles, since the volume already exists; the services
+would then present new passwords against roles still holding the old ones and
+fail to connect. To actually rotate, or to pick up this change on a volume
+created before it existed: `docker compose --env-file .env.selfhost down -v`
+(destroys data), delete and regenerate `.env.selfhost`, then `up` again fresh.
