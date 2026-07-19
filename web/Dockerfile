@@ -2,7 +2,7 @@
 # service: `context: .`) -- web/src/components/OddsWidget.tsx imports
 # directly from ../../../src/rating/odds, reaching outside web/ into the
 # Phase 1 rating engine.
-FROM node:20-alpine AS build
+FROM node:20.20.2-alpine3.23 AS build
 WORKDIR /app
 COPY web/package.json web/package-lock.json ./web/
 RUN cd web && npm ci
@@ -18,6 +18,6 @@ ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 RUN cd web && npx tsc -b && npx vite build
 
-FROM nginx:alpine
+FROM nginx:1.31.3-alpine
 COPY --from=build /app/web/dist /usr/share/nginx/html
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
