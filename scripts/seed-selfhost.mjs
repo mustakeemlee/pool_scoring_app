@@ -22,11 +22,31 @@ function loadSelfhostEnv() {
 }
 
 const API_URL = process.env.SELFHOST_API_URL ?? 'http://localhost:8000';
-const env = loadSelfhostEnv();
 
 const FIRST_NAMES = ['Alex', 'Jordan', 'Sam', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Jamie'];
 
+async function waitForStackReady(apiUrl, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${apiUrl}/rest/v1/`, { method: 'GET' });
+      if (response.status < 500) return;
+      lastError = new Error(`Stack not ready yet (status ${response.status})`);
+    } catch (err) {
+      lastError = err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(
+    `Stack did not become ready within ${timeoutMs}ms: ${lastError?.message ?? 'unknown error'}. ` +
+      'Check `docker compose --env-file .env.selfhost ps` for unhealthy services.',
+  );
+}
+
 async function main() {
+  const env = loadSelfhostEnv();
+  await waitForStackReady(API_URL);
   const serviceClient = createClient(API_URL, env.SERVICE_ROLE_KEY);
 
   const email = `selfhost-seed-admin-${Date.now()}@example.com`;
