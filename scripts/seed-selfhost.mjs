@@ -30,7 +30,11 @@ async function waitForStackReady(apiUrl, timeoutMs = 30000) {
   let lastError;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${apiUrl}/rest/v1/`, { method: 'GET' });
+      // A per-request timeout, distinct from the outer deadline: a request
+      // that connects but never responds (a half-initialized edge-runtime/
+      // Kong container, not a connection refusal) would otherwise block
+      // past the stated overall timeout with no enforcement.
+      const response = await fetch(`${apiUrl}/rest/v1/`, { method: 'GET', signal: AbortSignal.timeout(2000) });
       if (response.status < 500) return;
       lastError = new Error(`Stack not ready yet (status ${response.status})`);
     } catch (err) {
