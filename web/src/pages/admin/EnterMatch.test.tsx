@@ -112,7 +112,7 @@ describe('EnterMatchPage', () => {
     expect(invalidateSpy).toHaveBeenNthCalledWith(3, { queryKey: queryKeys.matchHistory('s1') });
     expect(invalidateSpy).toHaveBeenNthCalledWith(4, { queryKey: queryKeys.playerProfile('p1', 's1') });
     expect(invalidateSpy).toHaveBeenNthCalledWith(5, { queryKey: queryKeys.playerProfile('p2', 's1') });
-    expect(invalidateSpy).toHaveBeenNthCalledWith(6, { queryKey: ['players', 's1'] });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(6, { queryKey: queryKeys.players('s1') });
   });
 
   it('shows the edge function error message verbatim on failure', async () => {
