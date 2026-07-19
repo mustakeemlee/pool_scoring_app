@@ -20,7 +20,7 @@ vi.mock('@/lib/supabaseClient', () => ({
         return { select: () => ({ eq: () => ({ single: () => Promise.resolve(playerResult) }) }) };
       }
       if (table === 'player_season_ratings') {
-        return { select: () => ({ eq: () => ({ eq: () => ({ single: () => Promise.resolve(ratingResult) }) }) }) };
+        return { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve(ratingResult) }) }) }) };
       }
       if (table === 'player_statistics') {
         return { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve(statsResult) }) }) }) };
@@ -59,11 +59,11 @@ describe('usePlayerProfile', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('combines player, rating, statistics, events, and matches into one result', async () => {
-    const { result } = renderHook(() => usePlayerProfile('p1', 's1'), { wrapper });
+    const { result } = renderHook(() => usePlayerProfile('11111111-1111-1111-1111-111111111111', 's1'), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.player.full_name).toBe('Alex Testplayer');
-    expect(result.current.data?.seasonRating.grade).toBe('A+');
+    expect(result.current.data?.seasonRating?.grade).toBe('A+');
     expect(result.current.data?.statistics).toBeNull();
     expect(result.current.data?.ratingEvents).toEqual([]);
     expect(result.current.data?.matches).toEqual([]);
@@ -71,6 +71,11 @@ describe('usePlayerProfile', () => {
 
   it('does not run when playerId or seasonId is undefined', () => {
     const { result } = renderHook(() => usePlayerProfile(undefined, 's1'), { wrapper });
+    expect(result.current.fetchStatus).toBe('idle');
+  });
+
+  it('does not run when playerId is not a valid UUID', () => {
+    const { result } = renderHook(() => usePlayerProfile('p1', 's1'), { wrapper });
     expect(result.current.fetchStatus).toBe('idle');
   });
 });

@@ -37,13 +37,17 @@ export function PlayerProfilePage() {
           <h1 className="text-xl font-bold">{player.full_name}</h1>
           <p className="text-muted-foreground text-sm">{activeSeason.data?.name}</p>
         </div>
-        <GradeBadge grade={seasonRating.grade} />
+        {seasonRating && <GradeBadge grade={seasonRating.grade} />}
       </div>
+
+      {!seasonRating && (
+        <p className="text-muted-foreground mb-6 text-sm">No rating yet this season — check back after their first match.</p>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
         <div className="rounded-md border p-3">
           <p className="text-muted-foreground text-xs">Rating</p>
-          <p className="text-lg font-bold">{seasonRating.rating}</p>
+          <p className="text-lg font-bold">{seasonRating?.rating ?? '—'}</p>
         </div>
         <div className="rounded-md border p-3">
           <p className="text-muted-foreground text-xs">Win %</p>
@@ -59,7 +63,7 @@ export function PlayerProfilePage() {
         </div>
         <div className="rounded-md border p-3">
           <p className="text-muted-foreground text-xs">Season Pts</p>
-          <p className="text-lg font-bold">{seasonRating.season_points}</p>
+          <p className="text-lg font-bold">{seasonRating?.season_points ?? '—'}</p>
         </div>
       </div>
 

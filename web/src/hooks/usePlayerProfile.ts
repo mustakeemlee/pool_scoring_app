@@ -6,11 +6,13 @@ import type { PlayerSeasonRating, PlayerStatistics, RatingEvent, MatchRow, Playe
 
 export interface PlayerProfileData {
   player: PlayerSummary;
-  seasonRating: PlayerSeasonRating;
+  seasonRating: PlayerSeasonRating | null;
   statistics: PlayerStatistics | null;
   ratingEvents: RatingEvent[];
   matches: MatchRow[];
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function usePlayerProfile(playerId: string | undefined, seasonId: string | undefined) {
   return useQuery({
@@ -23,7 +25,7 @@ export function usePlayerProfile(playerId: string | undefined, seasonId: string 
           .select('*')
           .eq('player_id', playerId as string)
           .eq('season_id', seasonId as string)
-          .single(),
+          .maybeSingle(),
         supabase
           .from('player_statistics')
           .select('*')
@@ -53,12 +55,12 @@ export function usePlayerProfile(playerId: string | undefined, seasonId: string 
 
       return {
         player: playerRes.data as PlayerSummary,
-        seasonRating: ratingRes.data as PlayerSeasonRating,
+        seasonRating: ratingRes.data as PlayerSeasonRating | null,
         statistics: statsRes.data as PlayerStatistics | null,
         ratingEvents: eventsRes.data as RatingEvent[],
         matches: matchesRes.data as unknown as MatchRow[],
       };
     },
-    enabled: playerId !== undefined && seasonId !== undefined,
+    enabled: playerId !== undefined && seasonId !== undefined && UUID_RE.test(playerId),
   });
 }

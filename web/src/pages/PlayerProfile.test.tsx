@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+const usePlayerProfileMock = vi.fn();
 vi.mock('@/hooks/useActiveSeason', () => ({
   useActiveSeason: () => ({
     data: { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' },
@@ -11,19 +12,8 @@ vi.mock('@/hooks/useActiveSeason', () => ({
     isError: false,
   }),
 }));
-
 vi.mock('@/hooks/usePlayerProfile', () => ({
-  usePlayerProfile: () => ({
-    data: {
-      player: { id: 'p1', full_name: 'Alex Testplayer' },
-      seasonRating: { id: 'r1', player_id: 'p1', season_id: 's1', rating: 1768, rd: 210, volatility: 0.06, matches_played: 5, is_provisional: false, grade: 'A+', season_points: 142 },
-      statistics: { id: 'st1', player_id: 'p1', season_id: 's1', wins: 4, losses: 1, win_pct: 80, current_streak: 3, longest_streak: 3, frames_won: 20, frames_lost: 8, avg_opponent_rating: 1500, form_5: 80, form_10: 80, form_score: 82 },
-      ratingEvents: [],
-      matches: [],
-    },
-    isLoading: false,
-    isError: false,
-  }),
+  usePlayerProfile: (...args: unknown[]) => usePlayerProfileMock(...args),
 }));
 
 import { PlayerProfilePage } from './PlayerProfile';
@@ -43,6 +33,17 @@ function renderPage() {
 
 describe('PlayerProfilePage', () => {
   it('renders the player name, grade, and stat cards', () => {
+    usePlayerProfileMock.mockReturnValue({
+      data: {
+        player: { id: 'p1', full_name: 'Alex Testplayer' },
+        seasonRating: { id: 'r1', player_id: 'p1', season_id: 's1', rating: 1768, rd: 210, volatility: 0.06, matches_played: 5, is_provisional: false, grade: 'A+', season_points: 142 },
+        statistics: { id: 'st1', player_id: 'p1', season_id: 's1', wins: 4, losses: 1, win_pct: 80, current_streak: 3, longest_streak: 3, frames_won: 20, frames_lost: 8, avg_opponent_rating: 1500, form_5: 80, form_10: 80, form_score: 82 },
+        ratingEvents: [],
+        matches: [],
+      },
+      isLoading: false,
+      isError: false,
+    });
     renderPage();
     expect(screen.getByText('Alex Testplayer')).toBeInTheDocument();
     expect(screen.getByText('A+')).toBeInTheDocument();
@@ -50,5 +51,22 @@ describe('PlayerProfilePage', () => {
     expect(screen.getByText('80%')).toBeInTheDocument();
     expect(screen.getByText('W3')).toBeInTheDocument();
     expect(screen.getByText('142')).toBeInTheDocument();
+  });
+
+  it('shows an empty-state instead of crashing when the player has no rating row yet', () => {
+    usePlayerProfileMock.mockReturnValue({
+      data: {
+        player: { id: 'p2', full_name: 'Fresh Player' },
+        seasonRating: null,
+        statistics: null,
+        ratingEvents: [],
+        matches: [],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    renderPage();
+    expect(screen.getByText('Fresh Player')).toBeInTheDocument();
+    expect(screen.getByText(/no rating yet this season/i)).toBeInTheDocument();
   });
 });
