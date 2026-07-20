@@ -10,74 +10,57 @@ entering matches and managing seasons.
 .
 ├── src/                  # Rating engine + backend test suites (TypeScript)
 │   ├── rating/           #   Glicko-2/Elo, grades, season points, odds (pure logic)
-│   ├── db/               #   schema / RLS / view integration tests
-│   └── api/              #   edge-function API tests
+│   ├── db/                #   schema / RLS / view integration tests (scratch schema per run)
+│   └── api/               #   edge-function API tests (against deployed Supabase Cloud functions)
 ├── supabase/
 │   ├── migrations/       # The database schema — single source of truth
 │   ├── functions/        # Edge functions: enter-match, correct-match,
-│   │                     #   close-week, start-season
-│   └── config.toml       # Supabase CLI config (project_id = pool-scoring-app)
+│   │                      #   close-week, start-season
+│   └── config.toml        # Supabase CLI config (project_id = pool-scoring-app)
 ├── web/                  # React + Vite + Tailwind frontend
-├── docker/               # Self-hosted stack support files (kong, db-init)
-├── docker-compose.yml    # OPTIONAL self-hosted "production-shaped" stack
-└── scripts/              # Seeding + secrets helpers
+├── docker-compose.yml    # Single frontend container, talks directly to Supabase Cloud
+└── scripts/              # Seeding + shared env loader
 ```
 
 There is **one application**. The phases you may see referenced in
-`docs/` (rating engine → backend API → frontend → self-hosting) were
+`docs/` (rating engine → backend API → frontend → cloud hosting) were
 development milestones, not separate apps.
 
-## Two ways to run it (pick ONE)
+## Runtime model
 
-### A. Day-to-day development (recommended)
+Everything — local dev, the automated test suite, and the deployed app —
+points at one Supabase Cloud project. There is no local Postgres/Auth/REST
+stack and no self-hosted Kong/edge-runtime containers; the database, auth,
+REST API, and all four admin Edge Functions live on Supabase Cloud. The only
+thing that runs locally in Docker is the frontend: a single nginx container
+serving the built React app, talking to the cloud project directly over
+HTTPS.
 
-Uses the Supabase CLI's local stack (Docker project **pool-scoring-app**,
-API on port 54321):
+### First-time setup
 
-```
-npm run supabase:start     # start local Supabase (db + auth + rest + storage)
-npm run seed               # demo data
-cd web && npm run dev      # frontend on http://localhost:5173
-```
+1. Copy `.env.example` to `.env` and fill in your Supabase Cloud project's
+   values (Project Settings → API and → Database in the Supabase dashboard).
+2. Push the schema and deploy the functions (see
+   `supabase/functions/README.md` for the `SUPABASE_DB_URL` secret step):
+   ```
+   npx supabase db push
+   npx supabase functions deploy
+   ```
+3. Seed demo data:
+   ```
+   npm run seed
+   ```
+4. Run the frontend:
+   ```
+   cd web && npm run dev      # http://localhost:5173
+   ```
+   or as a single Docker container:
+   ```
+   docker compose up -d --build   # http://localhost:8080
+   ```
 
-`web/npm run dev` auto-writes `web/.env.local` from `supabase status`, so the
-frontend always points at the CLI stack. Apply new migrations to an
-already-created stack with `npx supabase migration up` (or `npx supabase db
-reset` to rebuild from scratch).
-
-### B. Self-hosted stack (docker-compose.yml)
-
-A production-shaped stack (Docker project **poolscoringapp**: postgres,
-gotrue, postgrest, kong, nginx frontend, 4 edge-function containers).
-Frontend on http://localhost:8080. See `docker/README.md` for the full
-runbook:
-
-```
-node scripts/generate-selfhost-secrets.mjs      # once
-docker compose --env-file .env.selfhost up -d --build
-node scripts/seed-selfhost.mjs
-```
-
-Notes:
-- **This is the production stack.** It is LAN-ready: port 8080 binds all
-  interfaces, and the frontend proxies the API on the same origin, so league
-  members open `http://<your-PC-IP>:8080` and everything works even if the
-  PC's IP changes. Set `PUBLIC_APP_URL` in `.env.selfhost` to that URL so
-  auth redirects are correct. Windows Firewall may prompt to allow port 8080.
-- **Schema updates without data loss:** `node scripts/migrate-selfhost.mjs`
-  applies new files from `supabase/migrations/` to the running database and
-  records them in `public.selfhost_migrations`. For a database created
-  before this script existed, run once with
-  `--baseline-through <last-migration-present-at-creation>` first.
-- Player photo uploads work here via the bundled `storage` service (files
-  persist in the `storage-data` volume).
-
-## Old Docker projects (historical)
-
-Earlier phases left orphaned Docker stacks (`rating-engine-phase-1`,
-`backend-api-phase2`, `audit-review-task1/4`). These were removed on
-2026-07-19; only `poolscoringapp` (this stack) and the optional
-`pool-scoring-app` CLI dev stack should exist.
+`web/npm run dev`/`build` auto-write `web/.env.local` from the root `.env`,
+so the frontend always points at your Supabase Cloud project.
 
 ## Tests
 
@@ -86,16 +69,22 @@ npm test                   # rating engine + db + api suites (repo root)
 cd web && npm test         # frontend component/page/hook tests
 ```
 
+`npm test` runs entirely against the Supabase Cloud project in your `.env`:
+`src/db` applies the full migration set into a fresh, uniquely-named scratch
+*schema* per test file (dropped afterward), and `src/api` calls the real
+deployed Edge Functions over HTTPS, deleting everything it creates when each
+file finishes. No local database is ever created or reset.
+
 ## Troubleshooting: "no data is loading"
 
-1. **Which stack is the app pointing at?** `web/.env.local` → port 54321
-   means the CLI stack must be running (`npm run supabase:start`).
-   http://localhost:8080 is the self-hosted stack.
+1. **Is `.env` filled in?** `web/.env.local` (auto-generated) must contain a
+   real `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` — if the app throws
+   "Missing VITE_SUPABASE_URL" in the browser console, re-run
+   `npm run env:generate` inside `web/` after fixing the root `.env`.
 2. **Is it seeded?** Empty DB = empty pages. Players only appear on the
    leaderboard after **3 completed matches** (`matches_played >= 3`).
-3. **Are migrations current?** The 2026-07-19 player-photos migration must be
-   applied or profile/match queries that select `photo_url` will error:
-   CLI stack → `npx supabase migration up`; self-hosted →
-   `node scripts/migrate-selfhost.mjs` (no data loss).
-4. **Self-hosted frontend looks stale?** It's baked at build time — rerun
-   `docker compose --env-file .env.selfhost up -d --build frontend`.
+3. **Are migrations current?** Run `npx supabase db push` to apply anything
+   new in `supabase/migrations/`.
+4. **Docker frontend looks stale?** It's baked at build time — rerun
+   `docker compose up -d --build frontend`.
+```
