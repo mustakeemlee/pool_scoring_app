@@ -10,12 +10,16 @@
 -- simply never added to that allowlist.
 --
 -- This is a live bug independent of this feature: web/src/hooks/usePlayers.ts
--- already selects photo_url directly from `players` via PostgREST and
--- currently gets "permission denied for table players" for real
--- anon/authenticated requests. It has been invisible because
--- leaderboard_view (which does expose photo_url) runs with the view
--- owner's privileges, not the requesting role's -- masking the missing
--- grant on the base table.
+-- already selects photo_url directly from `players` via PostgREST, and
+-- leaderboard_view also selects photo_url. Both would fail with "permission
+-- denied" for anon/authenticated requests because the missing SELECT grant
+-- applies to any caller; leaderboard_view has security_invoker = on
+-- (set in 20260717000000_audit_fixes.sql), meaning it checks the caller's
+-- grants on the underlying table, not the view owner's.
+--
+-- The bug went undetected because no existing test happened to select
+-- photo_url specifically as anon/authenticated through either the direct
+-- players table query or via leaderboard_view.
 --
 -- Migrations are append-only (see CLAUDE.md), so this can't be folded into
 -- either of the two past migrations that jointly caused it -- it lands
