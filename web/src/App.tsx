@@ -7,9 +7,10 @@ import { PlayerProfilePage } from '@/pages/PlayerProfile';
 import { GradeDistributionPage } from '@/pages/GradeDistribution';
 import { MatchHistoryPage } from '@/pages/MatchHistory';
 import { NotFoundPage } from '@/pages/NotFound';
-import { LoginPage } from '@/pages/admin/Login';
-import { ForgotPasswordPage } from '@/pages/admin/ForgotPassword';
-import { ResetPasswordPage } from '@/pages/admin/ResetPassword';
+import { LoginPage } from '@/pages/Login';
+import { SignupPage } from '@/pages/Signup';
+import { ForgotPasswordPage } from '@/pages/ForgotPassword';
+import { ResetPasswordPage } from '@/pages/ResetPassword';
 import { EnterMatchPage } from '@/pages/admin/EnterMatch';
 import { CorrectMatchPage } from '@/pages/admin/CorrectMatch';
 import { CloseWeekPage } from '@/pages/admin/CloseWeek';
@@ -26,9 +27,10 @@ export function App() {
           <Route path="/players/:playerId" element={<PlayerProfilePage />} />
           <Route path="/grades" element={<GradeDistributionPage />} />
           <Route path="/matches" element={<MatchHistoryPage />} />
-          <Route path="/admin/login" element={<LoginPage />} />
-          <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/admin/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route element={<AdminRouteGuard />}>
             <Route element={<AdminLayout />}>
               <Route path="/admin/enter-match" element={<EnterMatchPage />} />

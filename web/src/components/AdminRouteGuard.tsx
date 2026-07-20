@@ -13,7 +13,7 @@ export function AdminRouteGuard() {
   }
 
   if (!session) {
-    return <Navigate to="/admin/login" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   if (isAdmin.isError || isAdmin.data === false) {

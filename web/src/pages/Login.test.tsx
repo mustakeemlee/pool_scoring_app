@@ -1,4 +1,4 @@
-// web/src/pages/admin/Login.test.tsx
+// web/src/pages/Login.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -40,7 +40,7 @@ describe('LoginPage', () => {
     await waitFor(() =>
       expect(mockSignIn).toHaveBeenCalledWith({ email: 'admin@example.com', password: 'hunter2' }),
     );
-    expect(mockNavigate).toHaveBeenCalledWith('/admin/enter-match');
+    expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
   });
 
   it('shows the error message verbatim on a failed login', async () => {
@@ -69,7 +69,7 @@ describe('LoginPage', () => {
     );
     expect(screen.getByRole('link', { name: 'Forgot password?' })).toHaveAttribute(
       'href',
-      '/admin/forgot-password',
+      '/forgot-password',
     );
   });
 });

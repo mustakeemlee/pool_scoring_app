@@ -1,4 +1,4 @@
-// web/src/pages/admin/ForgotPassword.test.tsx
+// web/src/pages/ForgotPassword.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -14,7 +14,7 @@ import { ForgotPasswordPage } from './ForgotPassword';
 describe('ForgotPasswordPage', () => {
   beforeEach(() => mockReset.mockReset());
 
-  it('sends a reset email with a redirect to /admin/reset-password', async () => {
+  it('sends a reset email with a redirect to /reset-password', async () => {
     mockReset.mockResolvedValue({ data: {}, error: null });
     const user = userEvent.setup();
 
@@ -29,7 +29,7 @@ describe('ForgotPasswordPage', () => {
 
     await waitFor(() =>
       expect(mockReset).toHaveBeenCalledWith('admin@example.com', {
-        redirectTo: `${window.location.origin}/admin/reset-password`,
+        redirectTo: `${window.location.origin}/reset-password`,
       }),
     );
     expect(screen.getByText(/check your email/i)).toBeInTheDocument();

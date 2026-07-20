@@ -1,4 +1,4 @@
-// web/src/pages/admin/ResetPassword.test.tsx
+// web/src/pages/ResetPassword.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -54,7 +54,7 @@ describe('ResetPasswordPage', () => {
     await user.click(screen.getByRole('button', { name: 'Set new password' }));
 
     await waitFor(() => expect(mockUpdateUser).toHaveBeenCalledWith({ password: 'newpass123' }));
-    expect(mockNavigate).toHaveBeenCalledWith('/admin/login');
+    expect(mockNavigate).toHaveBeenCalledWith('/login');
   });
 
   it('shows the error message verbatim on failure', async () => {

@@ -1,42 +1,43 @@
-// web/src/pages/admin/Login.tsx
+// web/src/pages/ResetPassword.tsx
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabaseClient';
 
-export function LoginPage() {
+export function ResetPasswordPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    setIsSubmitting(true);
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-    setIsSubmitting(false);
-    if (signInError) {
-      setError(signInError.message);
+
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.");
       return;
     }
-    navigate('/admin/enter-match');
+
+    setIsSubmitting(true);
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    setIsSubmitting(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    navigate('/login');
   }
 
   return (
     <div className="card-surface mx-auto mt-8 max-w-sm p-8">
-      <div className="fpl-gradient mb-6 h-1 w-12 rounded-full" />
-      <h1 className="mb-6 text-2xl font-extrabold">Admin Login</h1>
+      <h1 className="mb-6 text-2xl font-extrabold">Reset Password</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        </div>
-        <div>
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">New password</Label>
           <Input
             id="password"
             type="password"
@@ -45,13 +46,20 @@ export function LoginPage() {
             required
           />
         </div>
+        <div>
+          <Label htmlFor="confirmPassword">Confirm password</Label>
+          <Input
+            id="confirmPassword"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+          />
+        </div>
         {error && <p className="text-destructive text-sm">{error}</p>}
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Logging in…' : 'Log in'}
+          {isSubmitting ? 'Saving…' : 'Set new password'}
         </Button>
-        <Link to="/admin/forgot-password" className="text-muted-foreground text-sm hover:underline">
-          Forgot password?
-        </Link>
       </form>
     </div>
   );

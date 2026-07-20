@@ -14,7 +14,7 @@ function renderGuarded() {
   return render(
     <MemoryRouter initialEntries={['/admin/enter-match']}>
       <Routes>
-        <Route path="/admin/login" element={<p>login page</p>} />
+        <Route path="/login" element={<p>login page</p>} />
         <Route element={<AdminRouteGuard />}>
           <Route path="/admin/enter-match" element={<p>enter match page</p>} />
         </Route>
