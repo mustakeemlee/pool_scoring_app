@@ -24,7 +24,7 @@ afterAll(async () => {
 });
 
 describe('row level security', () => {
-  it('enables RLS on all 9 tables', async () => {
+  it('enables RLS on all 11 tables', async () => {
     const result = await client.query(
       `select relname from pg_class
        join pg_namespace on pg_namespace.oid = pg_class.relnamespace
@@ -38,19 +38,21 @@ describe('row level security', () => {
         'admin_users',
         'match_audit_log',
         'matches',
+        'player_claims',
         'player_season_ratings',
         'player_statistics',
         'players',
         'rating_events',
         'seasons',
+        'user_profiles',
         'weekly_rankings',
       ].sort(),
     );
   });
 
-  it('grants a select policy on every publicly-readable table', async () => {
+  it('grants a select policy on every publicly/self-readable table', async () => {
     const result = await client.query(
-      `select tablename from pg_policies where schemaname = $1 and cmd = 'SELECT' order by tablename`,
+      `select distinct tablename from pg_policies where schemaname = $1 and cmd = 'SELECT' order by tablename`,
       [schemaName],
     );
     const tableNames = result.rows.map((r: { tablename: string }) => r.tablename);
@@ -58,11 +60,13 @@ describe('row level security', () => {
       [
         'admin_users',
         'matches',
+        'player_claims',
         'player_season_ratings',
         'player_statistics',
         'players',
         'rating_events',
         'seasons',
+        'user_profiles',
         'weekly_rankings',
       ].sort(),
     );

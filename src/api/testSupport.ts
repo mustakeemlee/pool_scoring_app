@@ -70,9 +70,62 @@ export async function cleanupTestAdmin(status: SupabaseStatus, userId: string): 
   if (adminDeleteError) {
     throw new Error(`Failed to delete admin_users row for ${userId}: ${adminDeleteError.message}`);
   }
+  const { error: profileDeleteError } = await serviceClient.from('user_profiles').delete().eq('id', userId);
+  if (profileDeleteError) {
+    throw new Error(`Failed to delete user_profiles row for ${userId}: ${profileDeleteError.message}`);
+  }
   const { error } = await serviceClient.auth.admin.deleteUser(userId);
   if (error) {
     throw new Error(`Failed to delete test admin auth user ${userId}: ${error.message}`);
+  }
+}
+
+// A plain signed-up account, no admin_users row -- the on_auth_user_created
+// trigger (20260720000000_player_accounts.sql) still gives it a
+// user_profiles row automatically, same as provisionTestAdmin's account.
+export async function provisionTestUser(status: SupabaseStatus): Promise<TestAdmin> {
+  const serviceClient = createClient(status.API_URL, status.SERVICE_ROLE_KEY);
+
+  const email = `test-user-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const password = 'test-password-123!';
+
+  const { data: userData, error: createError } = await serviceClient.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (createError || !userData.user) {
+    throw new Error(`Failed to create test user: ${createError?.message}`);
+  }
+
+  const anonClient = createClient(status.API_URL, status.ANON_KEY);
+  const { data: sessionData, error: signInError } = await anonClient.auth.signInWithPassword({
+    email,
+    password,
+  });
+  if (signInError || !sessionData.session) {
+    throw new Error(`Failed to sign in test user: ${signInError?.message}`);
+  }
+
+  return { userId: userData.user.id, accessToken: sessionData.session.access_token };
+}
+
+// FK-safe order: player_claims references both auth.users and players,
+// so it must go before either is touched; user_profiles before the auth
+// user itself, same reasoning as cleanupTestAdmin above.
+export async function cleanupTestUser(status: SupabaseStatus, userId: string): Promise<void> {
+  const serviceClient = createClient(status.API_URL, status.SERVICE_ROLE_KEY);
+  const { error: claimsDeleteError } = await serviceClient.from('player_claims').delete().eq('user_id', userId);
+  if (claimsDeleteError) {
+    throw new Error(`Failed to delete player_claims rows for ${userId}: ${claimsDeleteError.message}`);
+  }
+  const { error: profileDeleteError } = await serviceClient.from('user_profiles').delete().eq('id', userId);
+  if (profileDeleteError) {
+    throw new Error(`Failed to delete user_profiles row for ${userId}: ${profileDeleteError.message}`);
+  }
+  const { error } = await serviceClient.auth.admin.deleteUser(userId);
+  if (error) {
+    throw new Error(`Failed to delete test user auth user ${userId}: ${error.message}`);
   }
 }
 

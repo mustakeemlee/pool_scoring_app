@@ -1,0 +1,24 @@
+-- supabase/migrations/20260720010000_player_photos_select_grant.sql
+--
+-- Fixes a pre-existing gap discovered while testing the "linked player
+-- update own photo" policy added in 20260720000000_player_accounts.sql:
+-- 20260719000000_player_photos.sql added the players.photo_url column and
+-- granted UPDATE on it, but never granted SELECT on it.
+-- 20260717000000_audit_fixes.sql had already revoked the blanket table
+-- SELECT grant on `players` and replaced it with a column-level allowlist
+-- (to keep `email` private) before photo_url existed, so photo_url was
+-- simply never added to that allowlist.
+--
+-- This is a live bug independent of this feature: web/src/hooks/usePlayers.ts
+-- already selects photo_url directly from `players` via PostgREST and
+-- currently gets "permission denied for table players" for real
+-- anon/authenticated requests. It has been invisible because
+-- leaderboard_view (which does expose photo_url) runs with the view
+-- owner's privileges, not the requesting role's -- masking the missing
+-- grant on the base table.
+--
+-- Migrations are append-only (see CLAUDE.md), so this can't be folded into
+-- either of the two past migrations that jointly caused it -- it lands
+-- here as its own small, additive fix.
+
+grant select (photo_url) on players to anon, authenticated;

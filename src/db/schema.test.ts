@@ -37,11 +37,13 @@ describe('initial schema', () => {
         'admin_users',
         'match_audit_log',
         'matches',
+        'player_claims',
         'player_season_ratings',
         'player_statistics',
         'players',
         'rating_events',
         'seasons',
+        'user_profiles',
         'weekly_rankings',
       ].sort(),
     );
