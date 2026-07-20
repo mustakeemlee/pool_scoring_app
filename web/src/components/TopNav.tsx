@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { AccountMenu } from '@/components/AccountMenu';
 
 const links = [
   { to: '/', label: 'Leaderboard', end: true },
@@ -41,12 +42,7 @@ export function TopNav() {
                 {link.label}
               </NavLink>
             ))}
-            <NavLink
-              to="/admin/login"
-              className="ml-2 rounded-full border border-white/15 px-4 py-1.5 font-medium text-muted-foreground transition-colors hover:border-accent hover:text-accent"
-            >
-              Admin login
-            </NavLink>
+            <AccountMenu />
           </div>
         </div>
       </nav>

@@ -1,7 +1,6 @@
 // web/src/components/AdminSidebar.tsx
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabaseClient';
 
 const links = [
   { to: '/admin/enter-match', label: 'Enter Match' },
@@ -31,13 +30,6 @@ export function AdminSidebar() {
           </NavLink>
         ))}
       </nav>
-      <button
-        type="button"
-        onClick={() => supabase.auth.signOut()}
-        className="text-muted-foreground hover:text-destructive mt-6 text-sm font-medium transition-colors"
-      >
-        Logout
-      </button>
     </aside>
   );
 }

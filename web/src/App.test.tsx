@@ -19,6 +19,14 @@ vi.mock('@/hooks/useLeaderboard', () => ({
   }),
 }));
 
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ session: null, isLoading: false }),
+}));
+
+vi.mock('@/hooks/useIsAdmin', () => ({
+  useIsAdmin: () => ({ data: undefined, isLoading: false, isError: false }),
+}));
+
 function renderApp() {
   const queryClient = new QueryClient();
   return render(
