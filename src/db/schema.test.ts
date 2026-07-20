@@ -2,26 +2,24 @@
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { Client } from 'pg';
 import { applyMigrations } from './applyMigrations';
+import { createScratchSchema, dropScratchSchema, randomSchemaName } from './scratchSchema';
+import { loadRootEnv } from '../testEnv';
 
-const ADMIN_CONNECTION_STRING =
-  process.env.TEST_DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:54322/postgres';
+const CONNECTION_STRING = process.env.TEST_DATABASE_URL ?? loadRootEnv().TEST_DATABASE_URL;
 
 let client: Client;
+let schemaName: string;
 
 beforeAll(async () => {
-  const admin = new Client({ connectionString: ADMIN_CONNECTION_STRING });
-  await admin.connect();
-  await admin.query('DROP DATABASE IF EXISTS pool_league_test');
-  await admin.query('CREATE DATABASE pool_league_test');
-  await admin.end();
-
-  const testConnectionString = ADMIN_CONNECTION_STRING.replace(/\/[^/]*$/, '/pool_league_test');
-  client = new Client({ connectionString: testConnectionString });
+  client = new Client({ connectionString: CONNECTION_STRING });
   await client.connect();
+  schemaName = randomSchemaName('pool_league_schema_test');
+  await createScratchSchema(client, schemaName);
   await applyMigrations(client);
 }, 30000);
 
 afterAll(async () => {
+  await dropScratchSchema(client, schemaName);
   await client.end();
 });
 

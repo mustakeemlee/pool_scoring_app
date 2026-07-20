@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test:unit": "vitest run src/rating",
-    "test:integration": "vitest run src/db",
+    "test:integration": "vitest run src/db --no-file-parallelism",
     "test:api": "vitest run src/api",
     "test": "npm run test:unit && npm run test:integration && npm run test:api",
     "seed": "node scripts/seed.mjs"
