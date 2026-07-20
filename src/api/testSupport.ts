@@ -66,7 +66,10 @@ export async function provisionTestAdmin(status: SupabaseStatus): Promise<TestAd
 // leaves a permanent auth.users + admin_users row behind forever.
 export async function cleanupTestAdmin(status: SupabaseStatus, userId: string): Promise<void> {
   const serviceClient = createClient(status.API_URL, status.SERVICE_ROLE_KEY);
-  await serviceClient.from('admin_users').delete().eq('id', userId);
+  const { error: adminDeleteError } = await serviceClient.from('admin_users').delete().eq('id', userId);
+  if (adminDeleteError) {
+    throw new Error(`Failed to delete admin_users row for ${userId}: ${adminDeleteError.message}`);
+  }
   const { error } = await serviceClient.auth.admin.deleteUser(userId);
   if (error) {
     throw new Error(`Failed to delete test admin auth user ${userId}: ${error.message}`);
