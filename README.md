@@ -87,4 +87,3 @@ file finishes. No local database is ever created or reset.
    new in `supabase/migrations/`.
 4. **Docker frontend looks stale?** It's baked at build time — rerun
    `docker compose up -d --build frontend`.
-```
