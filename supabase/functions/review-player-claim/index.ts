@@ -33,13 +33,27 @@ Deno.serve(async (req: Request) => {
 
   try {
     await withTransaction(async (sql) => {
-      // Lock the target claim row before re-checking its status -- if two
-      // reviews of the same claim raced, only the first to acquire this
-      // lock proceeds; the second sees the now-committed 'approved'/
-      // 'rejected' status and errors instead of double-processing.
-      const [claim] = await sql`
-        select id, user_id, player_id, status from player_claims where id = ${body.claim_id} for update
+      // Lock the *entire* sibling set for this claim's player -- every
+      // player_claims row sharing its player_id, in ascending id order --
+      // before touching anything else, not just the target row. The sibling
+      // sweep below mutates other pending claims on the same player_id, so
+      // if we only locked the target row, two admins concurrently approving
+      // two different pending claims on the same contested player would each
+      // hold their own target row's lock while trying to update the other's
+      // row in the sweep -- a genuine deadlock. Locking the whole set up
+      // front, in a fixed order, means whichever transaction gets there
+      // first acquires every row it could touch (including the other's
+      // target) before the loser can acquire anything; the loser just blocks
+      // on this first statement (a normal wait, not a deadlock) until the
+      // winner commits, then proceeds against fresh data.
+      const siblings = await sql`
+        select id, user_id, player_id, status
+        from player_claims
+        where player_id = (select player_id from player_claims where id = ${body.claim_id})
+        order by id
+        for update
       `;
+      const claim = siblings.find((c) => c.id === body.claim_id);
       if (!claim) throw new HttpError(404, 'Claim not found');
       if (claim.status !== 'pending') {
         throw new HttpError(400, 'This claim has already been reviewed');
