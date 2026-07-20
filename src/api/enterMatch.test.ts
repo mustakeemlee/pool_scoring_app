@@ -1,15 +1,26 @@
-import { beforeAll, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { Client } from 'pg';
-import { getSupabaseStatus, provisionTestAdmin, type SupabaseStatus } from './testSupport';
+import {
+  getSupabaseStatus,
+  provisionTestAdmin,
+  cleanupTestAdmin,
+  cleanupSeasonData,
+  deletePlayers,
+  deleteSeasons,
+  type SupabaseStatus,
+  type TestAdmin,
+} from './testSupport';
 
 let status: SupabaseStatus;
+let admin: TestAdmin;
 let accessToken: string;
 let dbClient: Client;
 let seasonId: string;
+const createdPlayerIds: string[] = [];
 
 beforeAll(async () => {
   status = getSupabaseStatus();
-  const admin = await provisionTestAdmin(status);
+  admin = await provisionTestAdmin(status);
   accessToken = admin.accessToken;
 
   dbClient = new Client({ connectionString: status.DB_URL });
@@ -21,9 +32,19 @@ beforeAll(async () => {
   seasonId = season.rows[0].id;
 }, 30000);
 
+afterAll(async () => {
+  await cleanupSeasonData(dbClient, seasonId);
+  await deletePlayers(dbClient, createdPlayerIds);
+  await deleteSeasons(dbClient, [seasonId]);
+  await cleanupTestAdmin(status, admin.userId);
+  await dbClient.end();
+}, 30000);
+
 async function createPlayer(name: string): Promise<string> {
   const result = await dbClient.query(`insert into players (full_name) values ($1) returning id`, [name]);
-  return result.rows[0].id;
+  const id = result.rows[0].id;
+  createdPlayerIds.push(id);
+  return id;
 }
 
 describe('POST /functions/v1/enter-match', () => {

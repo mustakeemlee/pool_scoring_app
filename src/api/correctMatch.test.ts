@@ -1,13 +1,25 @@
 // src/api/correctMatch.test.ts
-import { beforeAll, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { Client } from 'pg';
-import { getSupabaseStatus, provisionTestAdmin, type SupabaseStatus } from './testSupport';
+import {
+  getSupabaseStatus,
+  provisionTestAdmin,
+  cleanupTestAdmin,
+  cleanupSeasonData,
+  deletePlayers,
+  deleteSeasons,
+  type SupabaseStatus,
+  type TestAdmin,
+} from './testSupport';
 import { calculateSeasonPoints } from '../rating/seasonPoints';
 
 let status: SupabaseStatus;
+let admin: TestAdmin;
 let accessToken: string;
 let dbClient: Client;
 let seasonId: string;
+const createdPlayerIds: string[] = [];
+const createdSeasonIds: string[] = [];
 
 async function enterMatch(playerA: string, playerB: string, framesA: number, framesB: number) {
   const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
@@ -65,12 +77,14 @@ async function closeWeek(targetSeasonId: string, weekEnding: string) {
 
 async function createPlayer(name: string): Promise<string> {
   const result = await dbClient.query(`insert into players (full_name) values ($1) returning id`, [name]);
-  return result.rows[0].id;
+  const id = result.rows[0].id;
+  createdPlayerIds.push(id);
+  return id;
 }
 
 beforeAll(async () => {
   status = getSupabaseStatus();
-  const admin = await provisionTestAdmin(status);
+  admin = await provisionTestAdmin(status);
   accessToken = admin.accessToken;
 
   dbClient = new Client({ connectionString: status.DB_URL });
@@ -80,12 +94,23 @@ beforeAll(async () => {
     `insert into seasons (name, start_date) values ('Correct Match Test Season', '2026-01-01') returning id`,
   );
   seasonId = season.rows[0].id;
+  createdSeasonIds.push(seasonId);
+}, 30000);
+
+afterAll(async () => {
+  for (const id of createdSeasonIds) {
+    await cleanupSeasonData(dbClient, id);
+  }
+  await deletePlayers(dbClient, createdPlayerIds);
+  await deleteSeasons(dbClient, createdSeasonIds);
+  await cleanupTestAdmin(status, admin.userId);
+  await dbClient.end();
 }, 30000);
 
 describe('PATCH /functions/v1/correct-match', () => {
   it('rejects correcting a match whose week is already closed', async () => {
-    const playerA = (await dbClient.query(`insert into players (full_name) values ('Closed Player A') returning id`)).rows[0].id;
-    const playerB = (await dbClient.query(`insert into players (full_name) values ('Closed Player B') returning id`)).rows[0].id;
+    const playerA = await createPlayer('Closed Player A');
+    const playerB = await createPlayer('Closed Player B');
     const matchId = await enterMatch(playerA, playerB, 5, 3);
     await dbClient.query(`update matches set is_period_closed = true where id = $1`, [matchId]);
 
@@ -98,8 +123,8 @@ describe('PATCH /functions/v1/correct-match', () => {
   });
 
   it('voids the old match, inserts a corrected one, and replays the open week rating', async () => {
-    const playerA = (await dbClient.query(`insert into players (full_name) values ('Correct Player A') returning id`)).rows[0].id;
-    const playerB = (await dbClient.query(`insert into players (full_name) values ('Correct Player B') returning id`)).rows[0].id;
+    const playerA = await createPlayer('Correct Player A');
+    const playerB = await createPlayer('Correct Player B');
     const matchId = await enterMatch(playerA, playerB, 5, 0); // whitewash, entered by mistake
 
     const response = await fetch(`${status.API_URL}/functions/v1/correct-match`, {
@@ -144,9 +169,10 @@ describe('PATCH /functions/v1/correct-match', () => {
       `insert into seasons (name, start_date) values ('Correct Match Cumulative Test Season', '2026-01-01') returning id`,
     );
     const cumSeasonId = season.rows[0].id;
+    createdSeasonIds.push(cumSeasonId);
 
-    const playerA = (await dbClient.query(`insert into players (full_name) values ('Cumulative Player A') returning id`)).rows[0].id;
-    const playerB = (await dbClient.query(`insert into players (full_name) values ('Cumulative Player B') returning id`)).rows[0].id;
+    const playerA = await createPlayer('Cumulative Player A');
+    const playerB = await createPlayer('Cumulative Player B');
 
     // 3 matches in what will become a closed week; player A wins all 3.
     await enterMatchIn(cumSeasonId, playerA, playerB, 5, 3, '2026-01-08');

@@ -1,18 +1,47 @@
-import { beforeAll, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { Client } from 'pg';
-import { getSupabaseStatus, provisionTestAdmin, type SupabaseStatus } from './testSupport';
+import {
+  getSupabaseStatus,
+  provisionTestAdmin,
+  cleanupTestAdmin,
+  cleanupSeasonData,
+  deletePlayers,
+  deleteSeasons,
+  type SupabaseStatus,
+  type TestAdmin,
+} from './testSupport';
 
 let status: SupabaseStatus;
+let admin: TestAdmin;
 let accessToken: string;
 let dbClient: Client;
+const createdPlayerIds: string[] = [];
+const createdSeasonIds: string[] = [];
+
+async function createPlayer(name: string): Promise<string> {
+  const result = await dbClient.query(`insert into players (full_name) values ($1) returning id`, [name]);
+  const id = result.rows[0].id;
+  createdPlayerIds.push(id);
+  return id;
+}
 
 beforeAll(async () => {
   status = getSupabaseStatus();
-  const admin = await provisionTestAdmin(status);
+  admin = await provisionTestAdmin(status);
   accessToken = admin.accessToken;
 
   dbClient = new Client({ connectionString: status.DB_URL });
   await dbClient.connect();
+}, 30000);
+
+afterAll(async () => {
+  for (const id of createdSeasonIds) {
+    await cleanupSeasonData(dbClient, id);
+  }
+  await deletePlayers(dbClient, createdPlayerIds);
+  await deleteSeasons(dbClient, createdSeasonIds);
+  await cleanupTestAdmin(status, admin.userId);
+  await dbClient.end();
 }, 30000);
 
 describe('POST /functions/v1/start-season', () => {
@@ -21,9 +50,9 @@ describe('POST /functions/v1/start-season', () => {
       `insert into seasons (name, start_date) values ('Old Season', '2025-01-01') returning id`,
     );
     const oldSeasonId = oldSeason.rows[0].id;
+    createdSeasonIds.push(oldSeasonId);
 
-    const player = await dbClient.query(`insert into players (full_name) values ('Carryover Player') returning id`);
-    const playerId = player.rows[0].id;
+    const playerId = await createPlayer('Carryover Player');
     await dbClient.query(
       `insert into player_season_ratings (player_id, season_id, rating, rd, volatility)
        values ($1, $2, 1900, 100, 0.06)`,
@@ -33,8 +62,7 @@ describe('POST /functions/v1/start-season', () => {
     // A second player with NO row in the old season - must NOT receive a
     // spurious carryover event in the new season (self-review checklist
     // item 5).
-    const strayPlayer = await dbClient.query(`insert into players (full_name) values ('No Prior Row Player') returning id`);
-    const strayPlayerId = strayPlayer.rows[0].id;
+    const strayPlayerId = await createPlayer('No Prior Row Player');
 
     const response = await fetch(`${status.API_URL}/functions/v1/start-season`, {
       method: 'POST',
@@ -47,6 +75,7 @@ describe('POST /functions/v1/start-season', () => {
     });
     expect(response.status).toBe(201);
     const { season_id: newSeasonId } = await response.json();
+    createdSeasonIds.push(newSeasonId);
 
     const newRating = await dbClient.query(
       `select rating, rd, grade from player_season_ratings where player_id = $1 and season_id = $2`,
@@ -113,6 +142,7 @@ describe('POST /functions/v1/start-season', () => {
     });
     expect(response.status).toBe(201);
     const { season_id: newSeasonId } = await response.json();
+    createdSeasonIds.push(newSeasonId);
     expect(newSeasonId).toBeTruthy();
 
     const rows = await dbClient.query(
@@ -154,12 +184,15 @@ describe('POST /functions/v1/start-season', () => {
       body: JSON.stringify({ new_season_name: 'Single Active Season Test 1', start_date: '2026-06-01' }),
     });
     const { season_id: firstSeasonId } = await first.json();
+    createdSeasonIds.push(firstSeasonId);
 
-    await fetch(`${status.API_URL}/functions/v1/start-season`, {
+    const second = await fetch(`${status.API_URL}/functions/v1/start-season`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ new_season_name: 'Single Active Season Test 2', start_date: '2026-06-08' }),
     });
+    const { season_id: secondSeasonId } = await second.json();
+    createdSeasonIds.push(secondSeasonId);
 
     const activeSeasons = await dbClient.query(`select id from seasons where status = 'active'`);
     expect(activeSeasons.rows.length).toBe(1);

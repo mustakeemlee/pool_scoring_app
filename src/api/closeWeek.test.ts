@@ -1,14 +1,25 @@
 // src/api/closeWeek.test.ts
-import { beforeAll, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { Client } from 'pg';
-import { getSupabaseStatus, provisionTestAdmin, type SupabaseStatus } from './testSupport';
+import {
+  getSupabaseStatus,
+  provisionTestAdmin,
+  cleanupTestAdmin,
+  cleanupSeasonData,
+  deletePlayers,
+  deleteSeasons,
+  type SupabaseStatus,
+  type TestAdmin,
+} from './testSupport';
 import { reconcilePeriod } from '../rating/glicko2';
 import { BASELINE_RATING, INITIAL_RD, INITIAL_VOLATILITY } from '../rating/constants';
 
 let status: SupabaseStatus;
+let admin: TestAdmin;
 let accessToken: string;
 let dbClient: Client;
 let seasonId: string;
+const createdPlayerIds: string[] = [];
 
 async function enterMatch(playerA: string, playerB: string, framesA: number, framesB: number) {
   const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
@@ -29,12 +40,14 @@ async function enterMatch(playerA: string, playerB: string, framesA: number, fra
 
 async function createPlayer(name: string): Promise<string> {
   const result = await dbClient.query(`insert into players (full_name) values ($1) returning id`, [name]);
-  return result.rows[0].id;
+  const id = result.rows[0].id;
+  createdPlayerIds.push(id);
+  return id;
 }
 
 beforeAll(async () => {
   status = getSupabaseStatus();
-  const admin = await provisionTestAdmin(status);
+  admin = await provisionTestAdmin(status);
   accessToken = admin.accessToken;
 
   dbClient = new Client({ connectionString: status.DB_URL });
@@ -46,10 +59,18 @@ beforeAll(async () => {
   seasonId = season.rows[0].id;
 }, 30000);
 
+afterAll(async () => {
+  await cleanupSeasonData(dbClient, seasonId);
+  await deletePlayers(dbClient, createdPlayerIds);
+  await deleteSeasons(dbClient, [seasonId]);
+  await cleanupTestAdmin(status, admin.userId);
+  await dbClient.end();
+}, 30000);
+
 describe('POST /functions/v1/close-week', () => {
   it('reconciles ratings via Glicko-2, writes weekly_rankings, and locks the matches', async () => {
-    const playerA = (await dbClient.query(`insert into players (full_name) values ('Close Week Player A') returning id`)).rows[0].id;
-    const playerB = (await dbClient.query(`insert into players (full_name) values ('Close Week Player B') returning id`)).rows[0].id;
+    const playerA = await createPlayer('Close Week Player A');
+    const playerB = await createPlayer('Close Week Player B');
     const matchId = await enterMatch(playerA, playerB, 5, 2);
 
     const response = await fetch(`${status.API_URL}/functions/v1/close-week`, {
@@ -82,8 +103,8 @@ describe('POST /functions/v1/close-week', () => {
   });
 
   it('rejects correcting a match after its week has closed', async () => {
-    const playerA = (await dbClient.query(`insert into players (full_name) values ('Locked Player A') returning id`)).rows[0].id;
-    const playerB = (await dbClient.query(`insert into players (full_name) values ('Locked Player B') returning id`)).rows[0].id;
+    const playerA = await createPlayer('Locked Player A');
+    const playerB = await createPlayer('Locked Player B');
     const matchId = await enterMatch(playerA, playerB, 5, 1);
 
     await fetch(`${status.API_URL}/functions/v1/close-week`, {
@@ -115,9 +136,9 @@ describe('POST /functions/v1/close-week', () => {
     // use P2's rating as it stood BEFORE this close-week call (its pre-period
     // state), never P2's rating AFTER close-week's own loop has already reconciled
     // P2 within this same run.
-    const p1 = (await dbClient.query(`insert into players (full_name) values ('Snapshot Test P1') returning id`)).rows[0].id;
-    const p2 = (await dbClient.query(`insert into players (full_name) values ('Snapshot Test P2') returning id`)).rows[0].id;
-    const p3 = (await dbClient.query(`insert into players (full_name) values ('Snapshot Test P3') returning id`)).rows[0].id;
+    const p1 = await createPlayer('Snapshot Test P1');
+    const p2 = await createPlayer('Snapshot Test P2');
+    const p3 = await createPlayer('Snapshot Test P3');
 
     await enterMatch(p2, p1, 5, 2); // P2 beats P1
     await enterMatch(p2, p3, 5, 3); // P2 beats P3
