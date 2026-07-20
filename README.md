@@ -41,7 +41,8 @@ HTTPS.
 1. Copy `.env.example` to `.env` and fill in your Supabase Cloud project's
    values (Project Settings → API and → Database in the Supabase dashboard).
 2. Push the schema and deploy the functions (see
-   `supabase/functions/README.md` for the `SUPABASE_DB_URL` secret step):
+   `supabase/functions/README.md` for how deployed functions get their
+   database access):
    ```
    npx supabase db push
    npx supabase functions deploy
@@ -74,6 +75,12 @@ cd web && npm test         # frontend component/page/hook tests
 *schema* per test file (dropped afterward), and `src/api` calls the real
 deployed Edge Functions over HTTPS, deleting everything it creates when each
 file finishes. No local database is ever created or reset.
+
+`src/db`'s tests briefly drop and recreate the shared project's player-photo
+storage RLS policies as a side effect of applying migrations into each
+scratch schema (the player-photos migration's storage DDL isn't schema-
+scoped). Avoid running `npm run test:integration` while the app is serving
+live photo uploads/views.
 
 ## Troubleshooting: "no data is loading"
 
