@@ -28,8 +28,9 @@ describe('row level security', () => {
     const result = await client.query(
       `select relname from pg_class
        join pg_namespace on pg_namespace.oid = pg_class.relnamespace
-       where pg_namespace.nspname = 'public' and relrowsecurity = true
+       where pg_namespace.nspname = $1 and relrowsecurity = true
        order by relname`,
+      [schemaName],
     );
     const tableNames = result.rows.map((r: { relname: string }) => r.relname);
     expect(tableNames).toEqual(
@@ -49,7 +50,8 @@ describe('row level security', () => {
 
   it('grants a select policy on every publicly-readable table', async () => {
     const result = await client.query(
-      `select tablename from pg_policies where schemaname = 'public' and cmd = 'SELECT' order by tablename`,
+      `select tablename from pg_policies where schemaname = $1 and cmd = 'SELECT' order by tablename`,
+      [schemaName],
     );
     const tableNames = result.rows.map((r: { tablename: string }) => r.tablename);
     expect(tableNames).toEqual(
@@ -68,7 +70,8 @@ describe('row level security', () => {
 
   it('defines no select policy at all for match_audit_log', async () => {
     const result = await client.query(
-      `select tablename from pg_policies where schemaname = 'public' and tablename = 'match_audit_log'`,
+      `select tablename from pg_policies where schemaname = $1 and tablename = 'match_audit_log'`,
+      [schemaName],
     );
     expect(result.rows).toEqual([]);
   });

@@ -27,8 +27,9 @@ describe('initial schema', () => {
   it('creates all required tables', async () => {
     const result = await client.query(
       `select table_name from information_schema.tables
-       where table_schema = 'public' and table_type = 'BASE TABLE'
+       where table_schema = $1 and table_type = 'BASE TABLE'
        order by table_name`,
+      [schemaName],
     );
     const tableNames = result.rows.map((r: { table_name: string }) => r.table_name);
     expect(tableNames).toEqual(
