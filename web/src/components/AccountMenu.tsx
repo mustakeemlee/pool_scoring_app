@@ -1,6 +1,7 @@
 // web/src/components/AccountMenu.tsx
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
@@ -11,6 +12,16 @@ export function AccountMenu() {
   const isAdmin = useIsAdmin(session?.user.id);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  async function handleLogOut() {
+    setOpen(false);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    navigate('/');
+  }
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -77,10 +88,7 @@ export function AccountMenu() {
           )}
           <button
             type="button"
-            onClick={() => {
-              setOpen(false);
-              void supabase.auth.signOut().then(() => navigate('/'));
-            }}
+            onClick={() => void handleLogOut()}
             className="rounded-lg px-3 py-2 text-left text-sm font-medium text-destructive hover:bg-white/10"
           >
             Log out

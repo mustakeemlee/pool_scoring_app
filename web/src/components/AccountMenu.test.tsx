@@ -7,6 +7,7 @@ const mockUseAuth = vi.fn();
 const mockUseIsAdmin = vi.fn();
 const mockSignOut = vi.fn();
 const mockNavigate = vi.fn();
+const mockToastError = vi.fn();
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => mockUseAuth() }));
 vi.mock('@/hooks/useIsAdmin', () => ({ useIsAdmin: () => mockUseIsAdmin() }));
@@ -17,6 +18,9 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return { ...actual, useNavigate: () => mockNavigate };
 });
+vi.mock('sonner', () => ({
+  toast: { error: (...args: unknown[]) => mockToastError(...args) },
+}));
 
 import { AccountMenu } from './AccountMenu';
 
@@ -69,5 +73,26 @@ describe('AccountMenu', () => {
 
     await user.click(screen.getByRole('button', { name: 'Log out' }));
     expect(mockSignOut).toHaveBeenCalled();
+  });
+
+  it('surfaces the error via toast and does not navigate when sign-out fails', async () => {
+    mockNavigate.mockClear();
+    mockSignOut.mockResolvedValue({ error: { message: 'Network error, please try again.' } });
+    mockUseAuth.mockReturnValue({ session: { user: { id: 'u1' } }, isLoading: false });
+    mockUseIsAdmin.mockReturnValue({ data: false, isLoading: false, isError: false });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <AccountMenu />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Account' }));
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+
+    expect(mockSignOut).toHaveBeenCalled();
+    expect(mockToastError).toHaveBeenCalledWith('Network error, please try again.');
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
