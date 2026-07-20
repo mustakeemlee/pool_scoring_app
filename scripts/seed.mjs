@@ -1,24 +1,15 @@
 // scripts/seed.mjs
 //
-// One-shot local dev seed script. Exercises the real enter-match and
-// close-week Edge Functions (not raw SQL inserts) so the resulting data has
-// genuine, internally-consistent rating history, statistics, and season
-// points -- per design spec section 7.
+// One-shot demo-data seed script against the Supabase Cloud project. Exercises
+// the real enter-match and close-week Edge Functions (not raw SQL inserts) so
+// the resulting data has genuine, internally-consistent rating history,
+// statistics, and season points.
 //
 // Usage: node scripts/seed.mjs
-// Requires `npx supabase start` and `npx supabase functions serve` running.
+// Requires a filled-in root .env (see .env.example) and the four Edge
+// Functions already deployed (`supabase functions deploy`).
 import { createClient } from '@supabase/supabase-js';
-import { execSync } from 'node:child_process';
-
-function getSupabaseStatus() {
-  const output = execSync('npx supabase status -o env', { encoding: 'utf-8' });
-  const env = {};
-  for (const line of output.split('\n')) {
-    const match = line.match(/^(\w+)="?(.*?)"?$/);
-    if (match) env[match[1]] = match[2];
-  }
-  return env;
-}
+import { loadRootEnv } from './loadEnv.mjs';
 
 const FIRST_NAMES = [
   'Alex', 'Jordan', 'Sam', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Jamie',
@@ -28,16 +19,9 @@ const FIRST_NAMES = [
 ];
 
 async function main() {
-  const status = getSupabaseStatus();
-  const serviceClient = createClient(status.API_URL, status.SERVICE_ROLE_KEY);
+  const env = loadRootEnv();
+  const serviceClient = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-  // --- One-shot admin/season/player setup. Each call is checked and throws
-  // on failure -- this is a human-run CLI script (not an Edge Function with
-  // an HTTP response to fail through), so failing loudly here means the
-  // script exits non-zero with a clear message instead of silently
-  // continuing with undefined data (e.g. `userData.user` being undefined
-  // would otherwise surface much later as a confusing "cannot read
-  // property 'id' of undefined").
   const email = `seed-admin-${Date.now()}@example.com`;
   const password = 'seed-password-123!';
   const { data: userData, error: createUserError } = await serviceClient.auth.admin.createUser({
@@ -56,7 +40,7 @@ async function main() {
     throw new Error(`Failed to insert admin_users row: ${adminInsertError.message}`);
   }
 
-  const anonClient = createClient(status.API_URL, status.ANON_KEY);
+  const anonClient = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
   const { data: sessionData, error: signInError } = await anonClient.auth.signInWithPassword({
     email,
     password,
@@ -83,19 +67,8 @@ async function main() {
     throw new Error(`Failed to create seed players: ${playersError?.message ?? 'no players returned'}`);
   }
 
-  // --- Pipeline calls. Unlike the setup calls above, these go through HTTP
-  // (the enter-match/close-week Edge Functions) so a failure surfaces as a
-  // non-2xx response rather than a Supabase client `error` field. Checking
-  // response.ok and throwing with the response body mirrors the "fail
-  // loudly" discipline every Edge Function in this plan applies to its own
-  // writes -- a silently-swallowed enter-match failure here would leave a
-  // player under-matched (breaking the MIN_MATCHES_FOR_RANKING=3 leaderboard
-  // eligibility gate) without any indication in the script's output, and a
-  // silently-swallowed close-week failure would leave that week's matches
-  // unlocked and unreconciled while the script happily moves on to the next
-  // week.
   async function enterMatch(playerA, playerB, framesA, framesB, matchDate) {
-    const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+    const response = await fetch(`${env.SUPABASE_URL}/functions/v1/enter-match`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -116,7 +89,7 @@ async function main() {
   }
 
   async function closeWeek(weekEnding) {
-    const response = await fetch(`${status.API_URL}/functions/v1/close-week`, {
+    const response = await fetch(`${env.SUPABASE_URL}/functions/v1/close-week`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ season_id: season.id, week_ending: weekEnding }),
@@ -129,10 +102,9 @@ async function main() {
 
   const weeks = ['2026-01-08', '2026-01-15', '2026-01-22'];
   for (const weekEnding of weeks) {
-    // Round-robin a handful of pairings each week
     for (let i = 0; i < players.length - 1; i += 2) {
-      const framesA = Math.floor(Math.random() * 3) + 3; // 3-5
-      const framesB = Math.floor(Math.random() * framesA); // 0..framesA-1, so A always wins
+      const framesA = Math.floor(Math.random() * 3) + 3;
+      const framesB = Math.floor(Math.random() * framesA);
       const [a, b] = Math.random() > 0.5 ? [players[i].id, players[i + 1].id] : [players[i + 1].id, players[i].id];
       await enterMatch(a, b, framesA, framesB, weekEnding);
     }
