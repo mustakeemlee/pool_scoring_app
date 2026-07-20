@@ -56,7 +56,7 @@ HTTPS.
    ```
    or as a single Docker container:
    ```
-   docker compose up -d --build   # http://localhost:8080
+   docker compose up -d --build   # http://localhost:8081
    ```
 
 `web/npm run dev`/`build` auto-write `web/.env.local` from the root `.env`,
