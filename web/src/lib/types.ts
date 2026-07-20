@@ -91,3 +91,15 @@ export interface Season {
   end_date: string | null;
   status: 'draft' | 'active' | 'completed';
 }
+
+export type ClaimStatus = 'pending' | 'approved' | 'rejected';
+
+export interface PlayerClaim {
+  id: string;
+  user_id: string;
+  player_id: string;
+  status: ClaimStatus;
+  created_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+}
