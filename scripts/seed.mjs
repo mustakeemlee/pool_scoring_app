@@ -18,26 +18,61 @@ const FIRST_NAMES = [
   'Peyton', 'Shawn', 'Terry', 'Wesley', 'Yael', 'Zion',
 ];
 
-async function main() {
-  const env = loadRootEnv();
-  const serviceClient = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-
-  const email = `seed-admin-${Date.now()}@example.com`;
-  const password = 'seed-password-123!';
-  const { data: userData, error: createUserError } = await serviceClient.auth.admin.createUser({
+// Finds the admin account by email and resets its password to the given
+// value, or creates it if it doesn't exist yet -- so re-running this script
+// always leaves the same, known admin login working, instead of minting a
+// new random-email admin (and abandoning the old one) every run.
+async function getOrCreateAdmin(serviceClient, email, password) {
+  const { data: created, error: createError } = await serviceClient.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
   });
-  if (createUserError || !userData?.user) {
-    throw new Error(`Failed to create seed admin user: ${createUserError?.message ?? 'no user returned'}`);
+  if (!createError && created?.user) {
+    return created.user;
   }
 
-  const { error: adminInsertError } = await serviceClient
+  const { data: listData, error: listError } = await serviceClient.auth.admin.listUsers();
+  if (listError) {
+    throw new Error(`Failed to look up existing admin user: ${listError.message}`);
+  }
+  const existing = listData.users.find((u) => u.email === email);
+  if (!existing) {
+    throw new Error(`Failed to create seed admin user: ${createError?.message ?? 'unknown error'}`);
+  }
+
+  const { data: updated, error: updateError } = await serviceClient.auth.admin.updateUserById(existing.id, {
+    password,
+  });
+  if (updateError || !updated?.user) {
+    throw new Error(`Failed to reset existing admin user's password: ${updateError?.message ?? 'no user returned'}`);
+  }
+  return updated.user;
+}
+
+async function main() {
+  const env = loadRootEnv();
+  const serviceClient = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+
+  const email = env.ADMIN_EMAIL || 'admin@poolscoring.local';
+  const password = env.ADMIN_PASSWORD || 'seed-password-123!';
+  const adminUser = await getOrCreateAdmin(serviceClient, email, password);
+
+  const { data: existingAdminRow, error: adminLookupError } = await serviceClient
     .from('admin_users')
-    .insert({ id: userData.user.id, display_name: 'Seed Admin', role: 'admin' });
-  if (adminInsertError) {
-    throw new Error(`Failed to insert admin_users row: ${adminInsertError.message}`);
+    .select('id')
+    .eq('id', adminUser.id)
+    .maybeSingle();
+  if (adminLookupError) {
+    throw new Error(`Failed to look up admin_users row: ${adminLookupError.message}`);
+  }
+  if (!existingAdminRow) {
+    const { error: adminInsertError } = await serviceClient
+      .from('admin_users')
+      .insert({ id: adminUser.id, display_name: 'Admin', role: 'admin' });
+    if (adminInsertError) {
+      throw new Error(`Failed to insert admin_users row: ${adminInsertError.message}`);
+    }
   }
 
   const anonClient = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);

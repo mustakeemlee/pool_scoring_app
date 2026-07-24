@@ -81,25 +81,23 @@ describe('row level security', () => {
   });
 });
 
-// Fix (Phase 3 PlayerProfile dependency, 20260714060000_rating_events_public_read.sql):
+// Fix (Phase 3 PlayerProfile dependency, 20260714060000_rating_events_public_read.sql;
+// later revoked from anon by 20260724010000_require_login_for_league_data.sql):
 // rating_events was previously fully private (no public SELECT policy), grouped
 // with admin_users/match_audit_log. Phase 3's PlayerProfile page needs to read it
-// directly as an anon user for the rating-history chart and match rating-deltas.
-// Confirmed live: querying rating_events with the anon key returned "permission
-// denied for table rating_events" before this fix. Decision: grant public SELECT,
-// since rating_events exposes nothing more sensitive than the already-public
-// current ratings/match scores/season points -- it's just the math behind them.
+// as an authenticated user for the rating-history chart and match rating-deltas.
 // admin_users and match_audit_log remain fully private (see tests above/below).
-describe('rating_events public read (anon/authenticated, PostgREST access)', () => {
+describe('rating_events read access (authenticated only, PostgREST access)', () => {
   afterAll(async () => {
     await client.query('reset role');
   });
 
-  it('allows anon to select from rating_events', async () => {
+  it('denies anon select on rating_events (login now required for league data)', async () => {
     await client.query('set role anon');
     try {
-      const result = await client.query('select * from rating_events limit 1');
-      expect(result.rows).toEqual([]);
+      await expect(client.query('select * from rating_events limit 1')).rejects.toThrow(
+        /permission denied for table rating_events/,
+      );
     } finally {
       await client.query('reset role');
     }
@@ -138,4 +136,50 @@ describe('rating_events public read (anon/authenticated, PostgREST access)', () 
       await client.query('reset role');
     }
   });
+});
+
+// 20260724010000_require_login_for_league_data.sql: league data (players,
+// seasons, ratings, matches, rankings, statistics) is no longer readable by
+// anon -- the frontend now requires login before showing any of it. RLS
+// policies stay `using (true)` (still correct for authenticated); only the
+// anon GRANTs were revoked, so authenticated keeps exactly the access it had
+// before.
+describe('league data requires login (anon denied, authenticated allowed)', () => {
+  afterAll(async () => {
+    await client.query('reset role');
+  });
+
+  // players only has column-level grants (id, full_name, joined_date,
+  // is_active, created_at, updated_at, photo_url -- email is never granted,
+  // see 20260717000000_audit_fixes.sql), so `select *` fails for
+  // authenticated too; every other table here keeps its blanket table grant.
+  const selects: Record<string, string> = {
+    players: 'select id, full_name, joined_date, is_active, created_at, updated_at, photo_url from players limit 1',
+    seasons: 'select * from seasons limit 1',
+    player_season_ratings: 'select * from player_season_ratings limit 1',
+    matches: 'select * from matches limit 1',
+    weekly_rankings: 'select * from weekly_rankings limit 1',
+    player_statistics: 'select * from player_statistics limit 1',
+  };
+
+  for (const [table, query] of Object.entries(selects)) {
+    it(`denies anon select on ${table}`, async () => {
+      await client.query('set role anon');
+      try {
+        await expect(client.query(query)).rejects.toThrow(new RegExp(`permission denied for table ${table}`));
+      } finally {
+        await client.query('reset role');
+      }
+    });
+
+    it(`allows authenticated to select from ${table}`, async () => {
+      await client.query('set role authenticated');
+      try {
+        const result = await client.query(query);
+        expect(result.rows).toEqual([]);
+      } finally {
+        await client.query('reset role');
+      }
+    });
+  }
 });

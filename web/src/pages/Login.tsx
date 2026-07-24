@@ -30,7 +30,7 @@ export function LoginPage() {
   return (
     <div className="card-surface mx-auto mt-8 max-w-sm p-8">
       <Logo size={40} className="mb-6" />
-      <h1 className="mb-6 text-2xl font-extrabold">Admin Login</h1>
+      <h1 className="mb-6 text-2xl font-extrabold">Log In</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
           <Label htmlFor="email">Email</Label>

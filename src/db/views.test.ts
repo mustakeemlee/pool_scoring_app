@@ -77,32 +77,32 @@ describe('grade_distribution_view', () => {
 // so the anon/authenticated roles Supabase provisions already exist in this
 // scratch database's cluster - SET ROLE lets a superuser connection assume
 // them directly without a separate PostgREST round-trip.
+//
+// Fix 2 (20260724010000_require_login_for_league_data.sql): anon's grant
+// was later revoked -- viewing the league now requires login -- so anon is
+// asserted denied below and authenticated keeps the access it always had.
 describe('view grants for anon/authenticated (PostgREST access)', () => {
   afterAll(async () => {
     await client.query('reset role');
   });
 
-  it('allows anon to select from leaderboard_view', async () => {
+  it('denies anon select on leaderboard_view (login now required for league data)', async () => {
     await client.query('set role anon');
     try {
-      const result = await client.query(
-        `select player_id from leaderboard_view where season_id = $1`,
-        [seasonId],
-      );
-      expect(result.rows.length).toBeGreaterThan(0);
+      await expect(
+        client.query(`select player_id from leaderboard_view where season_id = $1`, [seasonId]),
+      ).rejects.toThrow(/permission denied for view leaderboard_view/);
     } finally {
       await client.query('reset role');
     }
   });
 
-  it('allows anon to select from grade_distribution_view', async () => {
+  it('denies anon select on grade_distribution_view (login now required for league data)', async () => {
     await client.query('set role anon');
     try {
-      const result = await client.query(
-        `select grade from grade_distribution_view where season_id = $1`,
-        [seasonId],
-      );
-      expect(result.rows.length).toBeGreaterThan(0);
+      await expect(
+        client.query(`select grade from grade_distribution_view where season_id = $1`, [seasonId]),
+      ).rejects.toThrow(/permission denied for view grade_distribution_view/);
     } finally {
       await client.query('reset role');
     }
