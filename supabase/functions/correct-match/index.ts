@@ -2,6 +2,7 @@
 import { createAuthedClient, createServiceRoleClient } from '../_shared/supabaseClients.ts';
 import { requireAdmin } from '../_shared/requireAdmin.ts';
 import { jsonResponse } from '../_shared/response.ts';
+import { corsPreflightResponse } from '../_shared/cors.ts';
 import { withTransaction, type TransactionSql } from '../_shared/dbTransaction.ts';
 import { HttpError } from '../_shared/httpError.ts';
 import { isUuid, isValidFrameCount } from '../_shared/validation.ts';
@@ -35,6 +36,8 @@ async function lockRatingRow(sql: TransactionSql, playerId: string, seasonId: st
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return corsPreflightResponse();
+
   const authedClient = createAuthedClient(req);
   const db = createServiceRoleClient();
   const admin = await requireAdmin(authedClient, db);
