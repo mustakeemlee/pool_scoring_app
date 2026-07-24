@@ -48,6 +48,37 @@ describe('DashboardPage', () => {
     expect(screen.getByText('1')).toBeInTheDocument();
   });
 
+  it('shows the active season status in the admin panel', () => {
+    mockUseIsAdmin.mockReturnValue({ data: true, isLoading: false, isError: false });
+    mockUseUserProfile.mockReturnValue({ data: { linkedPlayerId: null, pendingClaim: null }, isLoading: false, isError: false });
+    mockUsePendingClaims.mockReturnValue({ data: [], isLoading: false, isError: false });
+    mockUseMatchHistory.mockReturnValue({ data: [], isLoading: false, isError: false });
+
+    renderDashboard();
+    expect(screen.getByText(/Season 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/active/)).toBeInTheDocument();
+  });
+
+  it('shows an error message when pending claims fail to load in the admin panel', () => {
+    mockUseIsAdmin.mockReturnValue({ data: true, isLoading: false, isError: false });
+    mockUseUserProfile.mockReturnValue({ data: { linkedPlayerId: null, pendingClaim: null }, isLoading: false, isError: false });
+    mockUsePendingClaims.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    mockUseMatchHistory.mockReturnValue({ data: [], isLoading: false, isError: false });
+
+    renderDashboard();
+    expect(screen.getByText(/couldn't load pending claims/i)).toBeInTheDocument();
+  });
+
+  it('shows an error message when recent matches fail to load in the admin panel', () => {
+    mockUseIsAdmin.mockReturnValue({ data: true, isLoading: false, isError: false });
+    mockUseUserProfile.mockReturnValue({ data: { linkedPlayerId: null, pendingClaim: null }, isLoading: false, isError: false });
+    mockUsePendingClaims.mockReturnValue({ data: [], isLoading: false, isError: false });
+    mockUseMatchHistory.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+
+    renderDashboard();
+    expect(screen.getByText(/couldn't load recent matches/i)).toBeInTheDocument();
+  });
+
   it('shows the player panel for a linked, non-admin account', () => {
     mockUseIsAdmin.mockReturnValue({ data: false, isLoading: false, isError: false });
     mockUseUserProfile.mockReturnValue({ data: { linkedPlayerId: 'p1', pendingClaim: null }, isLoading: false, isError: false });
@@ -89,5 +120,15 @@ describe('DashboardPage', () => {
 
     renderDashboard();
     expect(screen.getByText(/pending review/i)).toBeInTheDocument();
+  });
+
+  it('shows an error message when the leaderboard fails to load for an unlinked account', () => {
+    mockUseIsAdmin.mockReturnValue({ data: false, isLoading: false, isError: false });
+    mockUseUserProfile.mockReturnValue({ data: { linkedPlayerId: null, pendingClaim: null }, isLoading: false, isError: false });
+    mockUsePendingClaims.mockReturnValue({ data: [], isLoading: false, isError: false });
+    mockUseLeaderboard.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+
+    renderDashboard();
+    expect(screen.getByText(/couldn't load the leaderboard/i)).toBeInTheDocument();
   });
 });
