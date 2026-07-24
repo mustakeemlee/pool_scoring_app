@@ -1,12 +1,15 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { TopNav } from '@/components/TopNav';
 import { AdminRouteGuard } from '@/components/AdminRouteGuard';
+import { AuthRouteGuard } from '@/components/AuthRouteGuard';
 import { AdminLayout } from '@/components/AdminLayout';
 import { LeaderboardPage } from '@/pages/Leaderboard';
 import { PlayerProfilePage } from '@/pages/PlayerProfile';
 import { GradeDistributionPage } from '@/pages/GradeDistribution';
 import { MatchHistoryPage } from '@/pages/MatchHistory';
 import { NotFoundPage } from '@/pages/NotFound';
+import { DashboardPage } from '@/pages/Dashboard';
+import { SettingsPage } from '@/pages/Settings';
 import { LoginPage } from '@/pages/Login';
 import { SignupPage } from '@/pages/Signup';
 import { ForgotPasswordPage } from '@/pages/ForgotPassword';
@@ -31,6 +34,10 @@ export function App() {
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route element={<AuthRouteGuard />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
           <Route element={<AdminRouteGuard />}>
             <Route element={<AdminLayout />}>
               <Route path="/admin/enter-match" element={<EnterMatchPage />} />
