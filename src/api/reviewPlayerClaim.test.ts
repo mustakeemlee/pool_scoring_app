@@ -139,6 +139,43 @@ describe('POST /functions/v1/review-player-claim', () => {
     expect(secondResponse.status).toBe(400);
   });
 
+  it('rejects approving a claim for a player already linked to a different account', async () => {
+    const userA = await provisionTestUser(status);
+    createdUserIds.push(userA.userId);
+    const userB = await provisionTestUser(status);
+    createdUserIds.push(userB.userId);
+    const playerId = await createPlayer('Double Linked Player');
+    const claimA = await submitClaim(userA.userId, playerId);
+
+    const firstResponse = await fetch(`${status.API_URL}/functions/v1/review-player-claim`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${admin.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ claim_id: claimA, decision: 'approve' }),
+    });
+    expect(firstResponse.status).toBe(200);
+
+    const claimB = await submitClaim(userB.userId, playerId);
+    const secondResponse = await fetch(`${status.API_URL}/functions/v1/review-player-claim`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${admin.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ claim_id: claimB, decision: 'approve' }),
+    });
+    expect(secondResponse.status).toBe(400);
+    expect(await secondResponse.json()).toEqual({
+      error: 'This player is already linked to a different account',
+    });
+
+    const profileB = await dbClient.query(`select linked_player_id from user_profiles where id = $1`, [
+      userB.userId,
+    ]);
+    expect(profileB.rows[0].linked_player_id).toBeNull();
+
+    const profileA = await dbClient.query(`select linked_player_id from user_profiles where id = $1`, [
+      userA.userId,
+    ]);
+    expect(profileA.rows[0].linked_player_id).toBe(playerId);
+  });
+
   it('rejects a non-admin caller', async () => {
     const user = await provisionTestUser(status);
     createdUserIds.push(user.userId);

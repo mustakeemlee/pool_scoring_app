@@ -66,6 +66,22 @@ Deno.serve(async (req: Request) => {
       `;
 
       if (body.decision === 'approve') {
+        // A player can be linked to at most one account. The auto-reject
+        // sweep below only clears other *pending* claims on this player --
+        // it says nothing about a different account that was already
+        // approved and linked to this same player earlier. Check for that
+        // explicitly so the admin gets a clean error instead of a raw
+        // constraint-violation from user_profiles_linked_player_id_unique
+        // (20260724000000_user_profiles_backfill.sql), mirroring
+        // start-season/index.ts's explicit previous_season_id check.
+        const [alreadyLinked] = await sql`
+          select id from user_profiles
+          where linked_player_id = ${claim.player_id} and id <> ${claim.user_id}
+        `;
+        if (alreadyLinked) {
+          throw new HttpError(400, 'This player is already linked to a different account');
+        }
+
         await sql`
           update user_profiles set linked_player_id = ${claim.player_id}
           where id = ${claim.user_id}
