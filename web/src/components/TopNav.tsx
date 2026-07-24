@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { AccountMenu } from '@/components/AccountMenu';
+import { Logo } from '@/components/Logo';
 
 const links = [
   { to: '/', label: 'Leaderboard', end: true },
@@ -16,13 +17,8 @@ export function TopNav() {
       <nav className="border-b border-white/10 bg-fpl-dark/90 backdrop-blur-md">
         <div className="container flex h-16 items-center justify-between">
           <NavLink to="/" className="flex items-center gap-2.5">
-            <span aria-hidden className="fpl-gradient flex h-9 w-9 items-center justify-center rounded-xl text-lg shadow-lg">
-              🎱
-            </span>
-            <span aria-hidden className="text-lg font-extrabold tracking-tight">
-              Pool League
-            </span>
-            <span className="sr-only">🎱 Pool League</span>
+            <Logo size={36} />
+            <span className="text-lg font-extrabold tracking-tight">Pool League</span>
           </NavLink>
           <div className="flex items-center gap-1.5 text-sm">
             {links.map((link) => (

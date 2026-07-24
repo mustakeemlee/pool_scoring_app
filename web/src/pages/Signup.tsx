@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Logo } from '@/components/Logo';
 import { supabase } from '@/lib/supabaseClient';
 
 export function SignupPage() {
@@ -28,7 +29,7 @@ export function SignupPage() {
 
   return (
     <div className="card-surface mx-auto mt-8 max-w-sm p-8">
-      <div className="fpl-gradient mb-6 h-1 w-12 rounded-full" />
+      <Logo size={40} className="mb-6" />
       <h1 className="mb-6 text-2xl font-extrabold">Sign Up</h1>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>

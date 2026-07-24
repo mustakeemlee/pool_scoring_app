@@ -39,7 +39,7 @@ function renderApp() {
 describe('App', () => {
   it('renders the top nav and the leaderboard page at the root route', () => {
     renderApp();
-    expect(screen.getByText('🎱 Pool League')).toBeInTheDocument();
+    expect(screen.getByText('Pool League')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Leaderboard' })).toBeInTheDocument();
   });
 });
