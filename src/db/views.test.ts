@@ -23,21 +23,25 @@ beforeAll(async () => {
   );
   seasonId = season.rows[0].id;
 
-  // Player eligible for the leaderboard (matches_played >= 3)
-  const eligible = await client.query(`insert into players (full_name) values ('Eligible Player') returning id`);
+  // Played several matches, high rating -- should rank first.
+  const veteran = await client.query(`insert into players (full_name) values ('Veteran Player') returning id`);
   await client.query(
     `insert into player_season_ratings (player_id, season_id, rating, matches_played, grade)
      values ($1, $2, 1800, 5, 'A')`,
-    [eligible.rows[0].id, seasonId],
+    [veteran.rows[0].id, seasonId],
   );
 
-  // Player NOT eligible (matches_played < 3)
-  const ineligible = await client.query(`insert into players (full_name) values ('New Player') returning id`);
+  // Played one match -- ranks below the veteran (lower rating) but above
+  // anyone who hasn't played at all.
+  const newcomer = await client.query(`insert into players (full_name) values ('Newcomer Player') returning id`);
   await client.query(
     `insert into player_season_ratings (player_id, season_id, rating, matches_played, grade)
      values ($1, $2, 1500, 1, 'B')`,
-    [ineligible.rows[0].id, seasonId],
+    [newcomer.rows[0].id, seasonId],
   );
+
+  // Never played this season -- no player_season_ratings row at all.
+  await client.query(`insert into players (full_name) values ('Never Played')`);
 }, 30000);
 
 afterAll(async () => {
@@ -46,24 +50,59 @@ afterAll(async () => {
 });
 
 describe('leaderboard_view', () => {
-  it('includes only players with matches_played >= 3', async () => {
-    const result = await client.query(`select full_name from leaderboard_view where season_id = $1`, [seasonId]);
-    expect(result.rows.map((r: { full_name: string }) => r.full_name)).toEqual(['Eligible Player']);
+  it('includes every active player regardless of matches played', async () => {
+    const result = await client.query(
+      `select full_name from leaderboard_view where season_id = $1 order by rank`,
+      [seasonId],
+    );
+    expect(result.rows.map((r: { full_name: string }) => r.full_name)).toEqual([
+      'Veteran Player',
+      'Newcomer Player',
+      'Never Played',
+    ]);
   });
 
-  it('assigns rank 1 to the only eligible player', async () => {
-    const result = await client.query(`select rank from leaderboard_view where season_id = $1`, [seasonId]);
-    expect(result.rows[0].rank).toBe('1');
+  it('ranks every player who has played above every player who has not, regardless of rating', async () => {
+    const result = await client.query(
+      `select full_name, rank, matches_played from leaderboard_view where season_id = $1 order by rank`,
+      [seasonId],
+    );
+    expect(result.rows).toEqual([
+      { full_name: 'Veteran Player', rank: '1', matches_played: 5 },
+      { full_name: 'Newcomer Player', rank: '2', matches_played: 1 },
+      { full_name: 'Never Played', rank: '3', matches_played: 0 },
+    ]);
+  });
+
+  it('defaults an unplayed player to the baseline rating and the worst grade', async () => {
+    const result = await client.query(
+      `select rating, grade from leaderboard_view where season_id = $1 and full_name = 'Never Played'`,
+      [seasonId],
+    );
+    expect(result.rows[0].rating).toBe('1500');
+    expect(result.rows[0].grade).toBe('D');
+  });
+
+  it("does not override a played player's earned grade", async () => {
+    const result = await client.query(
+      `select grade from leaderboard_view where season_id = $1 and full_name = 'Newcomer Player'`,
+      [seasonId],
+    );
+    expect(result.rows[0].grade).toBe('B');
   });
 });
 
 describe('grade_distribution_view', () => {
-  it('counts only eligible players per grade', async () => {
+  it('counts every active player, defaulting unplayed players to grade D', async () => {
     const result = await client.query(
-      `select grade, player_count from grade_distribution_view where season_id = $1`,
+      `select grade, player_count from grade_distribution_view where season_id = $1 order by grade`,
       [seasonId],
     );
-    expect(result.rows).toEqual([{ grade: 'A', player_count: '1' }]);
+    expect(result.rows).toEqual([
+      { grade: 'A', player_count: '1' },
+      { grade: 'B', player_count: '1' },
+      { grade: 'D', player_count: '1' },
+    ]);
   });
 });
 

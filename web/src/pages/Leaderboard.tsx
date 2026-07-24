@@ -37,9 +37,7 @@ export function LeaderboardPage() {
       </div>
 
       {entries.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No ranked players yet — players appear after 3 matches.
-        </p>
+        <p className="text-muted-foreground text-sm">No active players yet.</p>
       ) : (
         <div className="card-surface overflow-hidden">
           <div className="text-muted-foreground grid grid-cols-[3rem_1fr_4rem_5rem_5rem] items-center gap-3 border-b border-white/10 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider sm:grid-cols-[3.5rem_1fr_5rem_6rem_6rem]">

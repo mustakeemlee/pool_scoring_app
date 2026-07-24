@@ -11,6 +11,7 @@ export interface LeaderboardEntry {
   grade: Grade;
   season_points: number;
   rank: number;
+  matches_played: number;
 }
 
 export interface GradeDistributionEntry {
