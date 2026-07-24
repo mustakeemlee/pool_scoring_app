@@ -86,3 +86,15 @@ export interface StartSeasonResponse {
 export function startSeason(body: StartSeasonBody) {
   return callEdgeFunction<StartSeasonBody, StartSeasonResponse>('start-season', 'POST', body);
 }
+
+export interface ReviewPlayerClaimBody {
+  claim_id: string;
+  decision: 'approve' | 'reject';
+}
+export interface ReviewPlayerClaimResponse {
+  claim_id: string;
+  status: 'approved' | 'rejected';
+}
+export function reviewPlayerClaim(body: ReviewPlayerClaimBody) {
+  return callEdgeFunction<ReviewPlayerClaimBody, ReviewPlayerClaimResponse>('review-player-claim', 'POST', body);
+}
