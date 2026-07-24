@@ -19,10 +19,12 @@ import { CorrectMatchPage } from '@/pages/admin/CorrectMatch';
 import { CloseWeekPage } from '@/pages/admin/CloseWeek';
 import { StartSeasonPage } from '@/pages/admin/StartSeason';
 import { ManagePlayersPage } from '@/pages/admin/ManagePlayers';
+import { Analytics } from '@vercel/analytics/react';
 
 export function App() {
   return (
     <BrowserRouter>
+      <Analytics />
       <TopNav />
       <main className="container py-8">
         <Routes>
