@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { queryKeys } from '@/lib/queryKeys';
+import { resolvePlayerPhotoUrls, pickResolvedUrl } from '@/lib/playerPhotos';
 
 export interface PlayerOption {
   id: string;
@@ -24,10 +25,12 @@ export function usePlayers(seasonId: string | undefined) {
       const ratingByPlayerId = new Map(
         (ratingsRes.data as { player_id: string; rating: number }[]).map((r) => [r.player_id, r.rating]),
       );
-      return (playersRes.data as { id: string; full_name: string; photo_url: string | null }[]).map((player) => ({
+      const rawPlayers = playersRes.data as { id: string; full_name: string; photo_url: string | null }[];
+      const photoUrlByPath = await resolvePlayerPhotoUrls(rawPlayers.map((p) => p.photo_url));
+      return rawPlayers.map((player) => ({
         id: player.id,
         full_name: player.full_name,
-        photo_url: player.photo_url,
+        photo_url: pickResolvedUrl(photoUrlByPath, player.photo_url),
         rating: ratingByPlayerId.get(player.id) ?? 1500,
       }));
     },

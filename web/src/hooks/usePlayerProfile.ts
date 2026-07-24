@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { queryKeys } from '@/lib/queryKeys';
+import { resolvePlayerPhotoUrls, pickResolvedUrl } from '@/lib/playerPhotos';
 import type { PlayerSeasonRating, PlayerStatistics, RatingEvent, MatchRow, PlayerSummary } from '@/lib/types';
 
 export interface PlayerProfileData {
@@ -53,12 +54,23 @@ export function usePlayerProfile(playerId: string | undefined, seasonId: string 
       if (eventsRes.error) throw eventsRes.error;
       if (matchesRes.error) throw matchesRes.error;
 
+      const player = playerRes.data as PlayerSummary;
+      const matches = matchesRes.data as unknown as MatchRow[];
+      const photoUrlByPath = await resolvePlayerPhotoUrls([
+        player.photo_url,
+        ...matches.flatMap((m) => [m.player_a.photo_url, m.player_b.photo_url]),
+      ]);
+
       return {
-        player: playerRes.data as PlayerSummary,
+        player: { ...player, photo_url: pickResolvedUrl(photoUrlByPath, player.photo_url) },
         seasonRating: ratingRes.data as PlayerSeasonRating | null,
         statistics: statsRes.data as PlayerStatistics | null,
         ratingEvents: eventsRes.data as RatingEvent[],
-        matches: matchesRes.data as unknown as MatchRow[],
+        matches: matches.map((match) => ({
+          ...match,
+          player_a: { ...match.player_a, photo_url: pickResolvedUrl(photoUrlByPath, match.player_a.photo_url) },
+          player_b: { ...match.player_b, photo_url: pickResolvedUrl(photoUrlByPath, match.player_b.photo_url) },
+        })),
       };
     },
     enabled: playerId !== undefined && seasonId !== undefined && UUID_RE.test(playerId),

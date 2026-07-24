@@ -43,11 +43,10 @@ export function usePlayerPhotoUpload(player: PhotoUploadTarget, seasonId: string
         .upload(path, file, { upsert: true, cacheControl: '3600' });
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage.from('player-photos').getPublicUrl(path);
-      const { error: updateError } = await supabase
-        .from('players')
-        .update({ photo_url: urlData.publicUrl })
-        .eq('id', player.id);
+      // player-photos is a private bucket -- store the bare object path, not
+      // a fetchable URL. Consumers resolve it to a signed URL per request
+      // (see web/src/lib/playerPhotos.ts).
+      const { error: updateError } = await supabase.from('players').update({ photo_url: path }).eq('id', player.id);
       if (updateError) throw updateError;
 
       toast.success(`Photo updated for ${player.full_name}`);

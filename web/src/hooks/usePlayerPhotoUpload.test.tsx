@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 const mockUpload = vi.fn();
-const mockGetPublicUrl = vi.fn();
 const mockUpdate = vi.fn();
 
 vi.mock('sonner', () => {
@@ -14,7 +13,7 @@ vi.mock('sonner', () => {
 });
 vi.mock('@/lib/supabaseClient', () => ({
   supabase: {
-    storage: { from: () => ({ upload: mockUpload, getPublicUrl: mockGetPublicUrl }) },
+    storage: { from: () => ({ upload: mockUpload }) },
     from: () => ({ update: () => ({ eq: mockUpdate }) }),
   },
 }));
@@ -35,7 +34,6 @@ const player = { id: 'p1', full_name: 'Alex Testplayer', photo_url: null };
 describe('usePlayerPhotoUpload', () => {
   beforeEach(() => {
     mockUpload.mockReset();
-    mockGetPublicUrl.mockReset();
     mockUpdate.mockReset();
     mockToastError.mockReset();
     mockToastSuccess.mockReset();
@@ -55,7 +53,6 @@ describe('usePlayerPhotoUpload', () => {
 
   it('uploads an image, updates photo_url, and toasts success', async () => {
     mockUpload.mockResolvedValue({ error: null });
-    mockGetPublicUrl.mockReturnValue({ data: { publicUrl: 'https://example.com/p1.jpg' } });
     mockUpdate.mockResolvedValue({ error: null });
     const { result } = renderHook(() => usePlayerPhotoUpload(player, 's1'), { wrapper });
     const file = new File(['x'], 'photo.jpg', { type: 'image/jpeg' });

@@ -48,8 +48,8 @@ describe('usePlayers', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual([
-      { id: 'p1', full_name: 'Alex Testplayer', rating: 1768 },
-      { id: 'p2', full_name: 'Brand New Player', rating: 1500 },
+      { id: 'p1', full_name: 'Alex Testplayer', photo_url: null, rating: 1768 },
+      { id: 'p2', full_name: 'Brand New Player', photo_url: null, rating: 1500 },
     ]);
   });
 
