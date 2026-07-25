@@ -1,36 +1,23 @@
 // web/src/components/PlayerAvatar.tsx
 import { useState } from 'react';
+import { User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type AvatarSize = 'sm' | 'md' | 'lg' | 'xl';
 
 const SIZE_CLASSES: Record<AvatarSize, string> = {
-  sm: 'h-8 w-8 text-xs',
-  md: 'h-10 w-10 text-sm',
-  lg: 'h-14 w-14 text-lg',
-  xl: 'h-24 w-24 text-3xl',
+  sm: 'h-8 w-8',
+  md: 'h-10 w-10',
+  lg: 'h-14 w-14',
+  xl: 'h-24 w-24',
 };
 
-// Deterministic gradient per player so avatars stay stable between renders.
-const GRADIENTS = [
-  'from-[#963cff] to-[#04f5ff]',
-  'from-[#ff2882] to-[#963cff]',
-  'from-[#04f5ff] to-[#00ff87]',
-  'from-[#ff2882] to-[#04f5ff]',
-  'from-[#00ff87] to-[#963cff]',
-];
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-function gradientFor(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  return GRADIENTS[hash % GRADIENTS.length];
-}
+const ICON_SIZE_CLASSES: Record<AvatarSize, string> = {
+  sm: 'h-4 w-4',
+  md: 'h-5 w-5',
+  lg: 'h-7 w-7',
+  xl: 'h-12 w-12',
+};
 
 export interface PlayerAvatarProps {
   name: string;
@@ -48,7 +35,7 @@ export function PlayerAvatar({ name, photoUrl, size = 'md', className }: PlayerA
       className={cn(
         'relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full ring-2 ring-white/15',
         SIZE_CLASSES[size],
-        !showPhoto && cn('bg-gradient-to-br font-bold text-white', gradientFor(name)),
+        !showPhoto && 'bg-white/10',
         className,
       )}
       aria-hidden={showPhoto ? undefined : true}
@@ -62,7 +49,7 @@ export function PlayerAvatar({ name, photoUrl, size = 'md', className }: PlayerA
           onError={() => setFailed(true)}
         />
       ) : (
-        initials(name)
+        <User className={cn('text-muted-foreground', ICON_SIZE_CLASSES[size])} />
       )}
     </span>
   );
