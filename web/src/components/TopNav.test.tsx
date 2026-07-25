@@ -19,9 +19,11 @@ describe('TopNav', () => {
         <TopNav />
       </MemoryRouter>,
     );
+    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Leaderboard' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Grades' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Matches' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Explore' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login');
     expect(screen.getByRole('link', { name: 'Sign up' })).toHaveAttribute('href', '/signup');
   });
@@ -35,9 +37,11 @@ describe('TopNav', () => {
         <TopNav />
       </MemoryRouter>,
     );
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/dashboard');
     expect(screen.getByRole('link', { name: 'Leaderboard' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Grades' })).toHaveAttribute('href', '/grades');
     expect(screen.getByRole('link', { name: 'Matches' })).toHaveAttribute('href', '/matches');
+    expect(screen.getByRole('link', { name: 'Explore' })).toHaveAttribute('href', '/explore');
     expect(screen.queryByRole('link', { name: 'Log in' })).not.toBeInTheDocument();
   });
 });

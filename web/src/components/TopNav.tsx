@@ -5,9 +5,11 @@ import { Logo } from '@/components/Logo';
 import { useAuth } from '@/hooks/useAuth';
 
 const links = [
+  { to: '/dashboard', label: 'Dashboard' },
   { to: '/', label: 'Leaderboard', end: true },
   { to: '/grades', label: 'Grades' },
   { to: '/matches', label: 'Matches' },
+  { to: '/explore', label: 'Explore' },
 ];
 
 export function TopNav() {

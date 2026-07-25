@@ -7,6 +7,7 @@ import { LeaderboardPage } from '@/pages/Leaderboard';
 import { PlayerProfilePage } from '@/pages/PlayerProfile';
 import { GradeDistributionPage } from '@/pages/GradeDistribution';
 import { MatchHistoryPage } from '@/pages/MatchHistory';
+import { ExplorePage } from '@/pages/Explore';
 import { NotFoundPage } from '@/pages/NotFound';
 import { DashboardPage } from '@/pages/Dashboard';
 import { SettingsPage } from '@/pages/Settings';
@@ -37,6 +38,7 @@ export function App() {
             <Route path="/players/:playerId" element={<PlayerProfilePage />} />
             <Route path="/grades" element={<GradeDistributionPage />} />
             <Route path="/matches" element={<MatchHistoryPage />} />
+            <Route path="/explore" element={<ExplorePage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
