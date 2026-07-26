@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
+import { getLastActivity, isActivityStale, markActivityNow, setIdleSignoutReason } from '@/lib/idleSession';
 
 interface AuthContextValue {
   session: Session | null;
@@ -15,13 +16,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    function acceptSession(newSession: Session | null, isSignIn: boolean) {
+      if (newSession && isActivityStale()) {
+        setIdleSignoutReason();
+        void supabase.auth.signOut();
+        setSession(null);
+        return;
+      }
+      if (newSession && (isSignIn || getLastActivity() === null)) {
+        markActivityNow();
+      }
+      setSession(newSession);
+    }
+
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+      acceptSession(data.session, false);
       setIsLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      acceptSession(newSession, event === 'SIGNED_IN');
     });
 
     return () => listener.subscription.unsubscribe();

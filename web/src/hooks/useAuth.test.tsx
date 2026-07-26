@@ -1,15 +1,18 @@
 // web/src/hooks/useAuth.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { ACTIVITY_STORAGE_KEY, IDLE_TIMEOUT_MS, getLastActivity } from '@/lib/idleSession';
 
 const mockGetSession = vi.fn();
 const mockOnAuthStateChange = vi.fn();
+const mockSignOut = vi.fn();
 
 vi.mock('@/lib/supabaseClient', () => ({
   supabase: {
     auth: {
       getSession: () => mockGetSession(),
       onAuthStateChange: (cb: unknown) => mockOnAuthStateChange(cb),
+      signOut: () => mockSignOut(),
     },
   },
 }));
@@ -27,6 +30,8 @@ describe('useAuth', () => {
     mockGetSession.mockReset();
     mockOnAuthStateChange.mockReset();
     mockOnAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
+    mockSignOut.mockReset().mockResolvedValue({ error: null });
+    localStorage.clear();
   });
 
   it('resolves the initial session from supabase.auth.getSession', async () => {
@@ -60,5 +65,69 @@ describe('useAuth', () => {
       return null;
     }
     expect(() => render(<Bare />)).toThrow('useAuth must be used within an AuthProvider');
+  });
+
+  it('signs out and exposes a null session when the stored activity timestamp is already stale', async () => {
+    localStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now() - IDLE_TIMEOUT_MS - 1_000));
+    mockGetSession.mockResolvedValue({ data: { session: { user: { email: 'admin@example.com' } } } });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('signed out')).toBeInTheDocument());
+    expect(mockSignOut).toHaveBeenCalled();
+  });
+
+  it('does not sign out a session with no prior recorded activity (brand-new login)', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: { user: { email: 'admin@example.com' } } } });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('signed in as admin@example.com')).toBeInTheDocument());
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('marks a fresh activity baseline on a SIGNED_IN auth event, even if one already existed', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null } });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('signed out')).toBeInTheDocument());
+
+    const oldTimestamp = Date.now() - 60_000;
+    localStorage.setItem(ACTIVITY_STORAGE_KEY, String(oldTimestamp));
+    const callback = mockOnAuthStateChange.mock.calls[0][0];
+    callback('SIGNED_IN', { user: { email: 'admin@example.com' } });
+
+    await waitFor(() => expect(getLastActivity()).toBeGreaterThan(oldTimestamp));
+  });
+
+  it('does not reset the activity timestamp on a token-refresh auth event', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null } });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('signed out')).toBeInTheDocument());
+
+    const recentTimestamp = Date.now() - 60_000;
+    localStorage.setItem(ACTIVITY_STORAGE_KEY, String(recentTimestamp));
+    const callback = mockOnAuthStateChange.mock.calls[0][0];
+    callback('TOKEN_REFRESHED', { user: { email: 'admin@example.com' } });
+
+    expect(localStorage.getItem(ACTIVITY_STORAGE_KEY)).toBe(String(recentTimestamp));
+    expect(mockSignOut).not.toHaveBeenCalled();
   });
 });
