@@ -9,7 +9,12 @@ class ResizeObserverMock {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).ResizeObserver = ResizeObserverMock;
 
-// Create a storage polyfill that works with fake timers
+// Node's built-in global `localStorage`/`sessionStorage` (an experimental
+// Node feature) collides with jsdom's under this Vitest/Node combination,
+// causing a bare `localStorage.clear()` in a test to throw
+// `TypeError: localStorage.clear is not a function`. This in-memory
+// polyfill replaces both globals so tests get a working Storage
+// implementation regardless of that collision.
 class StorageMock {
   private store: Record<string, string> = {};
 
