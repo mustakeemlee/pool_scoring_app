@@ -5,18 +5,30 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const usePlayerProfileMock = vi.fn();
-vi.mock('@/hooks/useActiveSeason', () => ({
-  useActiveSeason: () => ({
-    data: { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' },
-    isLoading: false,
-    isError: false,
-  }),
-}));
+const mockUseSeasonSelector = vi.fn();
+vi.mock('@/hooks/useSeasonSelector', () => ({ useSeasonSelector: () => mockUseSeasonSelector() }));
 vi.mock('@/hooks/usePlayerProfile', () => ({
   usePlayerProfile: (...args: unknown[]) => usePlayerProfileMock(...args),
 }));
 
 import { PlayerProfilePage } from './PlayerProfile';
+
+const SEASON = { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' as const };
+
+function seasonSelectorReturn(season: typeof SEASON | null, seasons: (typeof SEASON)[]) {
+  return {
+    selectedSeason: season,
+    selectedSeasonId: season?.id,
+    seasons,
+    isLoading: false,
+    isError: false,
+    selectSeason: vi.fn(),
+    selectPrevious: vi.fn(),
+    selectNext: vi.fn(),
+    hasPrevious: false,
+    hasNext: false,
+  };
+}
 
 function renderPage() {
   const queryClient = new QueryClient();
@@ -33,6 +45,7 @@ function renderPage() {
 
 describe('PlayerProfilePage', () => {
   it('renders the player name, grade, and stat cards', () => {
+    mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(SEASON, [SEASON]));
     usePlayerProfileMock.mockReturnValue({
       data: {
         player: { id: 'p1', full_name: 'Alex Testplayer' },
@@ -54,6 +67,7 @@ describe('PlayerProfilePage', () => {
   });
 
   it('shows an empty-state instead of crashing when the player has no rating row yet', () => {
+    mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(SEASON, [SEASON]));
     usePlayerProfileMock.mockReturnValue({
       data: {
         player: { id: 'p2', full_name: 'Fresh Player' },
@@ -68,5 +82,24 @@ describe('PlayerProfilePage', () => {
     renderPage();
     expect(screen.getByText('Fresh Player')).toBeInTheDocument();
     expect(screen.getByText(/no rating yet this season/i)).toBeInTheDocument();
+  });
+
+  it('renders using the most recent season when none is active, instead of erroring', () => {
+    const completedSeason = { ...SEASON, status: 'completed' as const };
+    mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(completedSeason, [completedSeason]));
+    usePlayerProfileMock.mockReturnValue({
+      data: {
+        player: { id: 'p1', full_name: 'Alex Testplayer' },
+        seasonRating: null,
+        statistics: null,
+        ratingEvents: [],
+        matches: [],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    renderPage();
+    expect(screen.getByText('Alex Testplayer')).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load this player. Try refreshing.")).not.toBeInTheDocument();
   });
 });

@@ -4,7 +4,7 @@ import { useParams } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GradeBadge } from '@/components/GradeBadge';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
-import { useActiveSeason } from '@/hooks/useActiveSeason';
+import { useSeasonSelector } from '@/hooks/useSeasonSelector';
 import { usePlayerProfile } from '@/hooks/usePlayerProfile';
 import { toRatingHistoryPoints } from '@/lib/ratingHistory';
 import { toPlayerProfileMatches } from '@/lib/playerProfileMatches';
@@ -30,14 +30,26 @@ function StatTile({ label, value, highlight }: { label: string; value: string | 
 
 export function PlayerProfilePage() {
   const { playerId } = useParams<{ playerId: string }>();
-  const activeSeason = useActiveSeason();
-  const profile = usePlayerProfile(playerId, activeSeason.data?.id);
+  const seasonSelector = useSeasonSelector();
+  const profile = usePlayerProfile(playerId, seasonSelector.selectedSeasonId);
 
-  if (activeSeason.isLoading || profile.isLoading) {
+  if (seasonSelector.isLoading) {
     return <Skeleton className="h-64 w-full rounded-xl" />;
   }
 
-  if (activeSeason.isError || profile.isError || !profile.data) {
+  if (seasonSelector.isError) {
+    return <p className="text-destructive">Couldn't load this player. Try refreshing.</p>;
+  }
+
+  if (!seasonSelector.selectedSeasonId) {
+    return <p className="text-muted-foreground">No seasons exist yet.</p>;
+  }
+
+  if (profile.isLoading) {
+    return <Skeleton className="h-64 w-full rounded-xl" />;
+  }
+
+  if (profile.isError || !profile.data) {
     return <p className="text-destructive">Couldn't load this player. Try refreshing.</p>;
   }
 
@@ -52,7 +64,7 @@ export function PlayerProfilePage() {
         <PlayerAvatar name={player.full_name} photoUrl={player.photo_url} size="xl" className="fpl-glow-green" />
         <div className="min-w-0">
           <p className="text-sm font-semibold uppercase tracking-widest text-accent">
-            {activeSeason.data?.name}
+            {seasonSelector.selectedSeason?.name}
           </p>
           <h1 className="truncate text-3xl font-extrabold sm:text-4xl">{player.full_name}</h1>
           {seasonRating && (
