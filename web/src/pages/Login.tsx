@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,14 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showIdleNotice] = useState(() => consumeIdleSignoutReason());
+  const [showIdleNotice, setShowIdleNotice] = useState(false);
+  const hasConsumedIdleReason = useRef(false);
+
+  useEffect(() => {
+    if (hasConsumedIdleReason.current) return;
+    hasConsumedIdleReason.current = true;
+    setShowIdleNotice(consumeIdleSignoutReason());
+  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
