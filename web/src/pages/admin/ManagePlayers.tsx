@@ -16,7 +16,7 @@ function PlayerPhotoRow({ player, seasonId }: { player: PlayerOption; seasonId: 
   const { inputRef, isUploading, handleFile, handleRemove } = usePlayerPhotoUpload(player, seasonId);
 
   return (
-    <li className="flex items-center gap-4 border-b border-white/5 px-4 py-3 last:border-0">
+    <li className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-0">
       <PlayerAvatar name={player.full_name} photoUrl={player.photo_url} size="lg" />
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold">{player.full_name}</p>
@@ -79,7 +79,7 @@ function PendingClaimsSection() {
       <h2 className="mb-3 text-lg font-bold">Pending claims</h2>
       <ul className="card-surface overflow-hidden">
         {pendingClaims.data.map((claim) => (
-          <li key={claim.id} className="flex items-center gap-4 border-b border-white/5 px-4 py-3 last:border-0">
+          <li key={claim.id} className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-0">
             <p className="flex-1 font-semibold">{claim.player_name}</p>
             <ConfirmDialog
               trigger={

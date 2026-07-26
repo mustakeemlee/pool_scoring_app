@@ -151,7 +151,7 @@ function UnlinkedDashboard({ pendingClaim, seasonId }: { pendingClaim: PlayerCla
       ) : (
         <ul className="card-surface overflow-hidden">
           {top5.map((entry) => (
-            <li key={entry.player_id} className="flex items-center justify-between border-b border-white/5 px-4 py-3 last:border-0">
+            <li key={entry.player_id} className="flex items-center justify-between border-b border-border px-4 py-3 last:border-0">
               <span className="font-medium">
                 #{entry.rank} {entry.full_name}
               </span>

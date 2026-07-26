@@ -48,7 +48,7 @@ export function PlayerProfilePage() {
   return (
     <div>
       {/* Hero */}
-      <div className="fpl-gradient-soft mb-6 flex flex-col items-start gap-5 rounded-2xl border border-white/10 px-6 py-8 sm:flex-row sm:items-center">
+      <div className="fpl-gradient-soft mb-6 flex flex-col items-start gap-5 rounded-2xl border border-border px-6 py-8 sm:flex-row sm:items-center">
         <PlayerAvatar name={player.full_name} photoUrl={player.photo_url} size="xl" className="fpl-glow-green" />
         <div className="min-w-0">
           <p className="text-sm font-semibold uppercase tracking-widest text-accent">
@@ -95,7 +95,7 @@ export function PlayerProfilePage() {
         <div className="card-surface overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-muted-foreground border-b border-white/10 text-left text-xs font-semibold uppercase tracking-wider">
+              <tr className="text-muted-foreground border-b border-border text-left text-xs font-semibold uppercase tracking-wider">
                 <th className="px-4 py-2.5">Date</th>
                 <th className="px-4 py-2.5">Opponent</th>
                 <th className="px-4 py-2.5">Score</th>
@@ -108,7 +108,7 @@ export function PlayerProfilePage() {
                 <tr
                   key={match.id}
                   className={cn(
-                    'border-b border-white/5 transition-colors last:border-0 hover:bg-white/5',
+                    'border-b border-border transition-colors last:border-0 hover:bg-foreground/5',
                     match.is_voided && 'opacity-50',
                   )}
                 >

@@ -44,7 +44,7 @@ export function ExplorePage() {
 
   return (
     <div>
-      <div className="fpl-gradient-soft mb-6 rounded-2xl border border-white/10 px-6 py-8">
+      <div className="fpl-gradient-soft mb-6 rounded-2xl border border-border px-6 py-8">
         <p className="text-sm font-semibold uppercase tracking-widest text-accent">Search</p>
         <h1 className="text-3xl font-extrabold sm:text-4xl">Explore</h1>
       </div>
@@ -74,10 +74,10 @@ export function ExplorePage() {
             ) : (
               <ul className="card-surface overflow-hidden">
                 {matchedPlayers.map((player) => (
-                  <li key={player.id} className="border-b border-white/5 last:border-0">
+                  <li key={player.id} className="border-b border-border last:border-0">
                     <Link
                       to={`/players/${player.id}`}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-white/5"
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-foreground/5"
                     >
                       <PlayerAvatar name={player.full_name} photoUrl={player.photo_url} size="sm" />
                       <span className="font-semibold">{player.full_name}</span>
@@ -106,9 +106,9 @@ export function ExplorePage() {
                     </div>
                   );
                   return (
-                    <li key={season.id} className="border-b border-white/5 last:border-0">
+                    <li key={season.id} className="border-b border-border last:border-0">
                       {season.status === 'active' ? (
-                        <Link to="/" className="block hover:bg-white/5">
+                        <Link to="/" className="block hover:bg-foreground/5">
                           {row}
                         </Link>
                       ) : (
