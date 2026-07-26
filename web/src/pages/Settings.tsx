@@ -12,7 +12,7 @@ import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useSubmitPlayerClaim } from '@/hooks/useSubmitPlayerClaim';
 import { usePlayerPhotoUpload } from '@/hooks/usePlayerPhotoUpload';
-import { useActiveSeason } from '@/hooks/useActiveSeason';
+import { useSeasonSelector } from '@/hooks/useSeasonSelector';
 import { usePlayers } from '@/hooks/usePlayers';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -205,17 +205,17 @@ export function SettingsPage() {
   const userId = session?.user.id;
   const isAdmin = useIsAdmin(userId);
   const userProfile = useUserProfile(userId);
-  const activeSeason = useActiveSeason();
+  const seasonSelector = useSeasonSelector();
 
-  if (isAdmin.isLoading || userProfile.isLoading || activeSeason.isLoading) {
+  if (isAdmin.isLoading || userProfile.isLoading || seasonSelector.isLoading) {
     return <Skeleton className="h-64 w-full rounded-xl" />;
   }
 
-  if (userProfile.isError || activeSeason.isError || !userId) {
+  if (userProfile.isError || seasonSelector.isError || !userId) {
     return <p className="text-destructive">Couldn't load your account. Try refreshing.</p>;
   }
 
-  const seasonId = activeSeason.data?.id ?? '';
+  const seasonId = seasonSelector.selectedSeasonId ?? '';
 
   return (
     <div className="max-w-2xl">

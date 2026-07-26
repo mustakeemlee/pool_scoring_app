@@ -8,7 +8,7 @@ const mockUseAuth = vi.fn();
 const mockUseIsAdmin = vi.fn();
 const mockUseUserProfile = vi.fn();
 const mockUsePlayers = vi.fn();
-const mockUseActiveSeason = vi.fn();
+const mockUseSeasonSelector = vi.fn();
 const mockSubmitClaimMutate = vi.fn();
 const mockUpdateUser = vi.fn();
 
@@ -16,7 +16,7 @@ vi.mock('@/hooks/useAuth', () => ({ useAuth: () => mockUseAuth() }));
 vi.mock('@/hooks/useIsAdmin', () => ({ useIsAdmin: () => mockUseIsAdmin() }));
 vi.mock('@/hooks/useUserProfile', () => ({ useUserProfile: () => mockUseUserProfile() }));
 vi.mock('@/hooks/usePlayers', () => ({ usePlayers: () => mockUsePlayers() }));
-vi.mock('@/hooks/useActiveSeason', () => ({ useActiveSeason: () => mockUseActiveSeason() }));
+vi.mock('@/hooks/useSeasonSelector', () => ({ useSeasonSelector: () => mockUseSeasonSelector() }));
 vi.mock('@/hooks/useSubmitPlayerClaim', () => ({
   useSubmitPlayerClaim: () => ({ mutate: mockSubmitClaimMutate, isPending: false }),
 }));
@@ -28,6 +28,23 @@ vi.mock('@/lib/supabaseClient', () => ({
 }));
 
 import { SettingsPage } from './Settings';
+
+const ACTIVE_SEASON = { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' as const };
+
+function seasonSelectorReturn(season: typeof ACTIVE_SEASON | null, seasons: (typeof ACTIVE_SEASON)[]) {
+  return {
+    selectedSeason: season,
+    selectedSeasonId: season?.id,
+    seasons,
+    isLoading: false,
+    isError: false,
+    selectSeason: vi.fn(),
+    selectPrevious: vi.fn(),
+    selectNext: vi.fn(),
+    hasPrevious: false,
+    hasNext: false,
+  };
+}
 
 function renderSettings() {
   const queryClient = new QueryClient();
@@ -45,7 +62,7 @@ describe('SettingsPage', () => {
     mockSubmitClaimMutate.mockReset();
     mockUpdateUser.mockReset();
     mockUseAuth.mockReturnValue({ session: { user: { id: 'u1', email: 'u1@example.com' } }, isLoading: false });
-    mockUseActiveSeason.mockReturnValue({ data: { id: 's1', name: 'Season 2026' }, isLoading: false, isError: false });
+    mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(ACTIVE_SEASON, [ACTIVE_SEASON]));
   });
 
   it('shows the claim picker for an unlinked, non-admin account', async () => {
@@ -111,5 +128,20 @@ describe('SettingsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Update password' }));
 
     await waitFor(() => expect(mockUpdateUser).toHaveBeenCalledWith({ password: 'newpassword1' }));
+  });
+
+  it('still renders account settings when there is no active season (regression: this used to hard-fail the whole page)', () => {
+    const completedSeason = { ...ACTIVE_SEASON, status: 'completed' as const };
+    mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(completedSeason, [completedSeason]));
+    mockUseIsAdmin.mockReturnValue({ data: false, isLoading: false, isError: false });
+    mockUseUserProfile.mockReturnValue({
+      data: { linkedPlayerId: null, pendingClaim: null },
+      isLoading: false,
+      isError: false,
+    });
+    mockUsePlayers.mockReturnValue({ data: [], isLoading: false, isError: false });
+
+    renderSettings();
+    expect(screen.getByRole('button', { name: 'Update password' })).toBeInTheDocument();
   });
 });
