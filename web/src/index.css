@@ -4,6 +4,29 @@
 
 @layer base {
   :root {
+    /* Light theme: soft lavender-tinted background, white cards, same
+       accent hues as dark mode recalibrated for contrast on a light bg */
+    --background: 280 45% 97%;
+    --foreground: 291 60% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 291 60% 14%;
+    --primary: 152 85% 32%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 280 30% 93%;
+    --secondary-foreground: 291 60% 14%;
+    --muted: 280 25% 93%;
+    --muted-foreground: 291 20% 40%;
+    --accent: 183 85% 34%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 349 75% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 280 25% 85%;
+    --input: 280 25% 85%;
+    --ring: 152 85% 32%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
     /* FPL-inspired dark theme: deep purple base, electric green primary,
        cyan accent, magenta-to-cyan gradients */
     --background: 291 100% 11%;
@@ -23,7 +46,6 @@
     --border: 290 45% 26%;
     --input: 290 45% 26%;
     --ring: 152 100% 50%;
-    --radius: 0.75rem;
   }
 }
 
@@ -67,6 +89,6 @@
     box-shadow: 0 0 24px hsl(152 100% 50% / 0.25);
   }
   .card-surface {
-    @apply rounded-xl border border-white/10 bg-card/80 backdrop-blur-sm;
+    @apply rounded-xl border border-border bg-card/80 backdrop-blur-sm;
   }
 }
