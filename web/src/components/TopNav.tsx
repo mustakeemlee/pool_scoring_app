@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { AccountMenu } from '@/components/AccountMenu';
 import { Logo } from '@/components/Logo';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/hooks/useAuth';
 
 const links = [
@@ -19,7 +20,7 @@ export function TopNav() {
     <header className="sticky top-0 z-40">
       {/* Signature FPL gradient strip */}
       <div className="fpl-gradient h-1" />
-      <nav className="border-b border-white/10 bg-fpl-dark/90 backdrop-blur-md">
+      <nav className="border-b border-border bg-card/90 backdrop-blur-md">
         <div className="container flex h-16 items-center justify-between">
           <NavLink to={session ? '/' : '/login'} className="flex items-center gap-2.5">
             <Logo size={36} />
@@ -36,14 +37,15 @@ export function TopNav() {
                     cn(
                       'rounded-full px-4 py-1.5 font-medium transition-colors',
                       isActive
-                        ? 'bg-primary text-primary-foreground shadow-[0_0_16px_hsl(152_100%_50%/0.35)]'
-                        : 'text-muted-foreground hover:bg-white/10 hover:text-foreground',
+                        ? 'bg-primary text-primary-foreground shadow-[0_0_16px_hsl(var(--primary)/0.35)]'
+                        : 'text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
                     )
                   }
                 >
                   {link.label}
                 </NavLink>
               ))}
+            <ThemeToggle />
             <AccountMenu />
           </div>
         </div>

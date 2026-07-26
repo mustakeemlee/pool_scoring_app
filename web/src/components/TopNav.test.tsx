@@ -6,13 +6,16 @@ import { TopNav } from './TopNav';
 
 const mockUseAuth = vi.fn();
 const mockUseIsAdmin = vi.fn();
+const mockUseTheme = vi.fn();
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => mockUseAuth() }));
 vi.mock('@/hooks/useIsAdmin', () => ({ useIsAdmin: () => mockUseIsAdmin() }));
+vi.mock('@/hooks/useTheme', () => ({ useTheme: () => mockUseTheme() }));
 
 describe('TopNav', () => {
   it('hides the site pages and shows only login/signup when logged out', () => {
     mockUseAuth.mockReturnValue({ session: null, isLoading: false });
     mockUseIsAdmin.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+    mockUseTheme.mockReturnValue({ theme: 'dark', toggleTheme: vi.fn() });
 
     render(
       <MemoryRouter>
@@ -31,6 +34,7 @@ describe('TopNav', () => {
   it('renders links to every public page once logged in', () => {
     mockUseAuth.mockReturnValue({ session: { user: { id: 'user-1' } }, isLoading: false });
     mockUseIsAdmin.mockReturnValue({ data: false, isLoading: false, isError: false });
+    mockUseTheme.mockReturnValue({ theme: 'dark', toggleTheme: vi.fn() });
 
     render(
       <MemoryRouter>

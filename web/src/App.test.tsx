@@ -29,6 +29,10 @@ vi.mock('@/hooks/useIsAdmin', () => ({
   useIsAdmin: () => ({ data: undefined, isLoading: false, isError: false }),
 }));
 
+vi.mock('@/hooks/useTheme', () => ({
+  useTheme: () => ({ theme: 'dark', toggleTheme: vi.fn() }),
+}));
+
 function renderApp() {
   const queryClient = new QueryClient();
   return render(
