@@ -11,6 +11,21 @@ vi.mock('@/hooks/useActiveSeason', () => ({
   }),
 }));
 
+vi.mock('@/hooks/useSeasonSelector', () => ({
+  useSeasonSelector: () => ({
+    selectedSeason: { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' },
+    selectedSeasonId: 's1',
+    seasons: [{ id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' }],
+    isLoading: false,
+    isError: false,
+    selectSeason: vi.fn(),
+    selectPrevious: vi.fn(),
+    selectNext: vi.fn(),
+    hasPrevious: false,
+    hasNext: false,
+  }),
+}));
+
 vi.mock('@/hooks/useLeaderboard', () => ({
   useLeaderboard: () => ({
     data: [],
