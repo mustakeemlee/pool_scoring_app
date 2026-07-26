@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { useActiveSeason } from '@/hooks/useActiveSeason';
+import { useSeasonSelector } from '@/hooks/useSeasonSelector';
 import { usePlayers, type PlayerOption } from '@/hooks/usePlayers';
 import { usePlayerPhotoUpload } from '@/hooks/usePlayerPhotoUpload';
 import { usePendingClaims } from '@/hooks/usePendingClaims';
@@ -121,14 +121,26 @@ function PendingClaimsSection() {
 }
 
 export function ManagePlayersPage() {
-  const activeSeason = useActiveSeason();
-  const players = usePlayers(activeSeason.data?.id);
+  const seasonSelector = useSeasonSelector();
+  const players = usePlayers(seasonSelector.selectedSeasonId);
 
-  if (activeSeason.isLoading || players.isLoading) {
+  if (seasonSelector.isLoading) {
     return <Skeleton className="h-64 w-full rounded-xl" />;
   }
 
-  if (activeSeason.isError || players.isError) {
+  if (seasonSelector.isError) {
+    return <p className="text-destructive">Couldn't load players. Try refreshing.</p>;
+  }
+
+  if (!seasonSelector.selectedSeasonId) {
+    return <p className="text-muted-foreground">No seasons exist yet.</p>;
+  }
+
+  if (players.isLoading) {
+    return <Skeleton className="h-64 w-full rounded-xl" />;
+  }
+
+  if (players.isError) {
     return <p className="text-destructive">Couldn't load players. Try refreshing.</p>;
   }
 
@@ -141,7 +153,7 @@ export function ManagePlayersPage() {
       </p>
       <ul className="card-surface overflow-hidden">
         {players.data?.map((player) => (
-          <PlayerPhotoRow key={player.id} player={player} seasonId={activeSeason.data?.id ?? ''} />
+          <PlayerPhotoRow key={player.id} player={player} seasonId={seasonSelector.selectedSeasonId ?? ''} />
         ))}
       </ul>
     </div>
