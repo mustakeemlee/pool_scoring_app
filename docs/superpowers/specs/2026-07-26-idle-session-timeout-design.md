@@ -34,7 +34,7 @@ players and admins. No role gets an exception.
   The single source of truth is a `lastActivityAt` epoch-ms timestamp
   persisted in `localStorage`, refreshed on activity (throttled to ~once per
   2s). Two consumers read it:
-  - A live check every 5s (plus an immediate check on `visibilitychange`/
+  - A live check every 1s (plus an immediate check on `visibilitychange`/
     `focus`) while a session exists, for the "left the tab open and walked
     away" case.
   - A one-time check inside `AuthProvider`, immediately after
@@ -71,7 +71,7 @@ players and admins. No role gets an exception.
 │    listeners (throttled)    │
 │  - writes lastActivityAt    │
 │    to localStorage          │
-│  - 5s interval + visibility/│
+│  - 1s interval + visibility/│
 │    focus + storage-event    │
 │    re-checks                │
 │  - exposes                  │
@@ -113,7 +113,7 @@ players and admins. No role gets an exception.
 
 1. **Activity** → DOM listener fires → throttled write of
    `Date.now()` to `localStorage['pool-app:last-activity']`.
-2. **Live idle check** (every 5s, or on focus/visibility/storage event) →
+2. **Live idle check** (every 1s, or on focus/visibility/storage event) →
    read the timestamp → if `now - lastActivityAt >= 4.5min`, flip
    `showWarning = true` and start a 30s countdown; if `>= 5min`, call
    `signOutForIdle()`.
