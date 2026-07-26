@@ -1,8 +1,8 @@
-// web/src/pages/Login.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { setIdleSignoutReason } from '@/lib/idleSession';
 
 const mockSignIn = vi.fn();
 const mockNavigate = vi.fn();
@@ -21,6 +21,7 @@ describe('LoginPage', () => {
   beforeEach(() => {
     mockSignIn.mockReset();
     mockNavigate.mockReset();
+    sessionStorage.clear();
   });
 
   it('signs in and navigates to the admin home on success', async () => {
@@ -71,5 +72,29 @@ describe('LoginPage', () => {
       'href',
       '/forgot-password',
     );
+  });
+
+  it('shows an inactivity notice when redirected here by the idle timeout', () => {
+    setIdleSignoutReason();
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText('You were signed out due to inactivity. Please sign in again.'),
+    ).toBeInTheDocument();
+  });
+
+  it('does not show an inactivity notice on a normal visit', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText(/signed out due to inactivity/)).not.toBeInTheDocument();
   });
 });

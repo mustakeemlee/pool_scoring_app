@@ -1,4 +1,3 @@
-// web/src/pages/Login.tsx
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -6,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/Logo';
 import { supabase } from '@/lib/supabaseClient';
+import { consumeIdleSignoutReason } from '@/lib/idleSession';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -13,6 +13,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showIdleNotice] = useState(() => consumeIdleSignoutReason());
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -31,6 +32,11 @@ export function LoginPage() {
     <div className="card-surface mx-auto mt-8 max-w-sm p-8">
       <Logo size={40} className="mb-6" />
       <h1 className="mb-6 text-2xl font-extrabold">Log In</h1>
+      {showIdleNotice && (
+        <p className="mb-4 rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
+          You were signed out due to inactivity. Please sign in again.
+        </p>
+      )}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
           <Label htmlFor="email">Email</Label>
