@@ -1,16 +1,10 @@
-// web/src/pages/MatchHistory.test.tsx
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-vi.mock('@/hooks/useActiveSeason', () => ({
-  useActiveSeason: () => ({
-    data: { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' },
-    isLoading: false,
-    isError: false,
-  }),
-}));
+const mockUseSeasonSelector = vi.fn();
+vi.mock('@/hooks/useSeasonSelector', () => ({ useSeasonSelector: () => mockUseSeasonSelector() }));
 
 vi.mock('@/hooks/useMatchHistory', () => ({
   useMatchHistory: () => ({
@@ -28,6 +22,23 @@ vi.mock('@/hooks/useMatchHistory', () => ({
 
 import { MatchHistoryPage } from './MatchHistory';
 
+const SEASON = { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' as const };
+
+function seasonSelectorReturn(season: typeof SEASON | null, seasons: (typeof SEASON)[]) {
+  return {
+    selectedSeason: season,
+    selectedSeasonId: season?.id,
+    seasons,
+    isLoading: false,
+    isError: false,
+    selectSeason: vi.fn(),
+    selectPrevious: vi.fn(),
+    selectNext: vi.fn(),
+    hasPrevious: false,
+    hasNext: false,
+  };
+}
+
 function renderPage() {
   const queryClient = new QueryClient();
   return render(
@@ -40,10 +51,18 @@ function renderPage() {
 }
 
 describe('MatchHistoryPage', () => {
-  it('renders the match table with league-wide results', () => {
+  it('renders the match table with league-wide results, and the season pill', () => {
+    mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(SEASON, [SEASON]));
     renderPage();
     expect(screen.getByText('Alex Testplayer')).toBeInTheDocument();
     expect(screen.getByText('Jordan Testplayer')).toBeInTheDocument();
     expect(screen.getByText('5–2')).toBeInTheDocument();
+    expect(screen.getByText('Season 2026')).toBeInTheDocument();
+  });
+
+  it('shows a "no seasons exist yet" message instead of erroring when there are no seasons at all', () => {
+    mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(null, []));
+    renderPage();
+    expect(screen.getByText('No seasons exist yet.')).toBeInTheDocument();
   });
 });
