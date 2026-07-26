@@ -8,7 +8,7 @@ import { useLeaderboard } from '@/hooks/useLeaderboard';
 import { cn } from '@/lib/utils';
 
 const RANK_STYLES: Record<number, string> = {
-  1: 'bg-primary text-primary-foreground shadow-[0_0_14px_hsl(152_100%_50%/0.45)]',
+  1: 'bg-primary text-primary-foreground shadow-[0_0_14px_hsl(var(--primary)/0.45)]',
   2: 'bg-accent text-accent-foreground',
   3: 'bg-fpl-magenta text-white',
 };
@@ -29,7 +29,7 @@ export function LeaderboardPage() {
 
   return (
     <div>
-      <div className="fpl-gradient-soft mb-6 rounded-2xl border border-white/10 px-6 py-8">
+      <div className="fpl-gradient-soft mb-6 rounded-2xl border border-border px-6 py-8">
         <p className="text-sm font-semibold uppercase tracking-widest text-accent">
           {activeSeason.data?.name}
         </p>
@@ -40,7 +40,7 @@ export function LeaderboardPage() {
         <p className="text-muted-foreground text-sm">No active players yet.</p>
       ) : (
         <div className="card-surface overflow-hidden">
-          <div className="text-muted-foreground grid grid-cols-[3rem_1fr_4rem_5rem_5rem] items-center gap-3 border-b border-white/10 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider sm:grid-cols-[3.5rem_1fr_5rem_6rem_6rem]">
+          <div className="text-muted-foreground grid grid-cols-[3rem_1fr_4rem_5rem_5rem] items-center gap-3 border-b border-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wider sm:grid-cols-[3.5rem_1fr_5rem_6rem_6rem]">
           <span>#</span>
           <span>Player</span>
           <span className="text-center">Grade</span>
@@ -52,14 +52,14 @@ export function LeaderboardPage() {
               <li
                 key={entry.player_id}
                 className={cn(
-                  'grid grid-cols-[3rem_1fr_4rem_5rem_5rem] items-center gap-3 border-b border-white/5 px-4 py-3 transition-colors last:border-0 hover:bg-white/5 sm:grid-cols-[3.5rem_1fr_5rem_6rem_6rem]',
-                  entry.rank <= 3 && 'bg-white/[0.03]',
+                  'grid grid-cols-[3rem_1fr_4rem_5rem_5rem] items-center gap-3 border-b border-border px-4 py-3 transition-colors last:border-0 hover:bg-foreground/5 sm:grid-cols-[3.5rem_1fr_5rem_6rem_6rem]',
+                  entry.rank <= 3 && 'bg-foreground/[0.03]',
                 )}
               >
                 <span
                   className={cn(
                     'flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold',
-                    RANK_STYLES[entry.rank] ?? 'bg-white/10 text-foreground',
+                    RANK_STYLES[entry.rank] ?? 'bg-foreground/10 text-foreground',
                   )}
                 >
                   {entry.rank}

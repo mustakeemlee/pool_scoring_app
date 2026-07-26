@@ -29,7 +29,7 @@ export function MatchTable({ matches }: { matches: MatchRow[] }) {
     <div className="card-surface overflow-hidden">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-muted-foreground border-b border-white/10 text-left text-xs font-semibold uppercase tracking-wider">
+          <tr className="text-muted-foreground border-b border-border text-left text-xs font-semibold uppercase tracking-wider">
             <th className="px-4 py-2.5">Date</th>
             <th className="px-4 py-2.5">Player A</th>
             <th className="px-4 py-2.5">Player B</th>
@@ -41,7 +41,7 @@ export function MatchTable({ matches }: { matches: MatchRow[] }) {
             <tr
               key={match.id}
               className={cn(
-                'border-b border-white/5 transition-colors last:border-0 hover:bg-white/5',
+                'border-b border-border transition-colors last:border-0 hover:bg-foreground/5',
                 match.is_voided && 'opacity-50',
               )}
             >

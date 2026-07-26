@@ -33,9 +33,9 @@ export function PlayerAvatar({ name, photoUrl, size = 'md', className }: PlayerA
   return (
     <span
       className={cn(
-        'relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full ring-2 ring-white/15',
+        'relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full ring-2 ring-border',
         SIZE_CLASSES[size],
-        !showPhoto && 'bg-white/10',
+        !showPhoto && 'bg-muted',
         className,
       )}
       aria-hidden={showPhoto ? undefined : true}

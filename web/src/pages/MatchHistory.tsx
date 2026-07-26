@@ -18,7 +18,7 @@ export function MatchHistoryPage() {
 
   return (
     <div>
-      <div className="fpl-gradient-soft mb-6 rounded-2xl border border-white/10 px-6 py-8">
+      <div className="fpl-gradient-soft mb-6 rounded-2xl border border-border px-6 py-8">
         <p className="text-sm font-semibold uppercase tracking-widest text-accent">
           {activeSeason.data?.name}
         </p>
