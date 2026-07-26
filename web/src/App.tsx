@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { TopNav } from '@/components/TopNav';
+import { IdleLogoutDialog } from '@/components/IdleLogoutDialog';
 import { AdminRouteGuard } from '@/components/AdminRouteGuard';
 import { AuthRouteGuard } from '@/components/AuthRouteGuard';
 import { AdminLayout } from '@/components/AdminLayout';
@@ -27,6 +28,7 @@ export function App() {
     <BrowserRouter>
       <Analytics />
       <TopNav />
+      <IdleLogoutDialog />
       <main className="container py-8">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
