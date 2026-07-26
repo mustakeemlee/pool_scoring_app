@@ -1,18 +1,31 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { GradeBadge } from '@/components/GradeBadge';
-import { useActiveSeason } from '@/hooks/useActiveSeason';
+import { SeasonPillSwitcher } from '@/components/SeasonPillSwitcher';
+import { useSeasonSelector } from '@/hooks/useSeasonSelector';
 import { useGradeDistribution } from '@/hooks/useGradeDistribution';
 import { toFullGradeDistribution } from '@/lib/gradeDistribution';
 
 export function GradeDistributionPage() {
-  const activeSeason = useActiveSeason();
-  const distribution = useGradeDistribution(activeSeason.data?.id);
+  const seasonSelector = useSeasonSelector();
+  const distribution = useGradeDistribution(seasonSelector.selectedSeasonId);
 
-  if (activeSeason.isLoading || distribution.isLoading) {
+  if (seasonSelector.isLoading) {
     return <Skeleton className="h-64 w-full rounded-xl" />;
   }
 
-  if (activeSeason.isError || distribution.isError) {
+  if (seasonSelector.isError) {
+    return <p className="text-destructive">Couldn't load grade distribution. Try refreshing.</p>;
+  }
+
+  if (!seasonSelector.selectedSeasonId) {
+    return <p className="text-muted-foreground">No seasons exist yet.</p>;
+  }
+
+  if (distribution.isLoading) {
+    return <Skeleton className="h-64 w-full rounded-xl" />;
+  }
+
+  if (distribution.isError) {
     return <p className="text-destructive">Couldn't load grade distribution. Try refreshing.</p>;
   }
 
@@ -22,9 +35,17 @@ export function GradeDistributionPage() {
   return (
     <div>
       <div className="fpl-gradient-soft mb-6 rounded-2xl border border-border px-6 py-8">
-        <p className="text-sm font-semibold uppercase tracking-widest text-accent">
-          {activeSeason.data?.name}
-        </p>
+        <div className="mb-3 flex justify-center sm:justify-start">
+          <SeasonPillSwitcher
+            selectedSeason={seasonSelector.selectedSeason}
+            seasons={seasonSelector.seasons}
+            onSelectSeason={seasonSelector.selectSeason}
+            onPrevious={seasonSelector.selectPrevious}
+            onNext={seasonSelector.selectNext}
+            hasPrevious={seasonSelector.hasPrevious}
+            hasNext={seasonSelector.hasNext}
+          />
+        </div>
         <h1 className="text-3xl font-extrabold sm:text-4xl">Grade Distribution</h1>
       </div>
       <div className="card-surface flex flex-col gap-4 p-6">
