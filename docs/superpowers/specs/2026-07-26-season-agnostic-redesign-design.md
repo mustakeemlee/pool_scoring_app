@@ -46,11 +46,41 @@ get an at-a-glance view of whatever season is (or isn't) currently running.
   `useLeaderboard`/`useGradeDistribution`/`useMatchHistory` changes — those
   hooks and their query contracts are untouched.
 - **`Explore`** gets a season filter (defaulting to "All seasons") that
-  narrows the **Matches** section only. The Players and Seasons sections are
-  untouched — players are season-independent identities (only their
-  *rating* is season-scoped, and Explore's player search doesn't show
-  ratings), and the Seasons section is already an exhaustive list of every
-  season.
+  narrows the **Matches** section only. The Seasons section is untouched — it's
+  already an exhaustive list of every season. The **Players** section's
+  dependency on `useActiveSeason()`/`usePlayers(seasonId)` is removed
+  entirely (not migrated to the new selector) — its rendered list never
+  displays a rating, so there was never a real reason to fetch season-scoped
+  data for it. This also fixes a genuine pre-existing bug found while
+  reviewing this spec: `ExplorePage`'s combined `isLoading`/`isError` never
+  actually included `activeSeason`'s own error state, and `usePlayers`'s
+  `enabled: seasonId !== undefined` meant a missing active season silently
+  left the query disabled rather than loading or erroring — the Players
+  section would render in an inconsistent limbo state instead of either.
+- **`useActiveSeason()`'s other real callers, found by grepping every usage
+  rather than trusting the four pages assumed during brainstorming**, need
+  explicit dispositions:
+  - **`PlayerProfile.tsx`, `Settings.tsx`, `admin/ManagePlayers.tsx`** all use
+    it purely to resolve a `seasonId` for otherwise-unrelated display data (a
+    player's current-season rating/rank; a linked player's rating shown in
+    Settings; each roster row's current-season rating in the photo-management
+    list). All three migrate to the same `useSeasonSelector()` used by
+    Leaderboard/Grades/Matches, **without** rendering `SeasonPillSwitcher` —
+    they just consume `selectedSeasonId` silently, same default-to-most-recent
+    behavior, no switcher UI (matches the original ask, which only named
+    Leaderboard/Grades/Matches for the visible switcher). This is why
+    `Settings.tsx` hard-failing its *entire* account page — password change,
+    everything, none of it season-related — over a missing active season is
+    exactly the class of bug this spec exists to fix, even though nobody
+    thought to mention Settings when scoping this out loud.
+  - **`admin/EnterMatch.tsx`, `admin/CorrectMatch.tsx`,
+    `admin/CloseWeek.tsx`** are deliberately **left exactly as they are**.
+    Entering a match, correcting a match, or closing a week are operations
+    that inherently require a genuinely active season to exist — there's
+    nowhere to attach a new match if none is running. Their hard failure on
+    "no active season" is correct, existing business logic, not a UX gap;
+    explicitly calling this out so a future reader doesn't mistake the
+    omission for an oversight.
 - **`Dashboard` drops the season concept entirely.** The season-scoped cards
   that exist today — a linked player's rating/rank/season-points tiles, the
   rating history chart, `AdminDashboard`'s one-line "*name* — *status*" — move
@@ -76,10 +106,10 @@ get an at-a-glance view of whatever season is (or isn't) currently running.
 - **Out of scope**: URL-persisted season selection (see above); changing
   what counts as `'draft'`/`'active'`/`'completed'` or the season lifecycle
   itself (`start-season`'s "at most one active season" invariant is
-  untouched); adding a season selector to the full Player Profile page (it
-  keeps showing "whatever the browsing-default resolves to" the same way
-  Leaderboard does, just without its own switcher UI — not requested);
-  any visual redesign beyond the pieces named above (the existing FPL-inspired
+  untouched); adding a visible switcher UI to `PlayerProfile`/`Settings`/
+  `admin/ManagePlayers` (they resolve a default season the same way
+  Leaderboard does, just without the pill — not requested); any visual
+  redesign beyond the pieces named above (the existing FPL-inspired
   gradient/palette identity, already reinforced by the light/dark mode work,
   is extended to the new components, not replaced).
 
@@ -142,9 +172,15 @@ get an at-a-glance view of whatever season is (or isn't) currently running.
 
 **New files:**
 - `web/src/hooks/useSeasonSelector.ts` — the browsing-mode season state.
+  Consumed by six pages total (see below); only three render the switcher UI.
 - `web/src/hooks/useSeasonInFlight.ts` — the admin operational-status hook.
 - `web/src/hooks/useRecentActivity.ts` — powers the Dashboard feed (recent
   matches across any season + recently-active players).
+- `web/src/hooks/usePlayerRoster.ts` — a season-independent player list
+  (`id`, `full_name`, `photo_url`, active players only) for `Explore`, which
+  replaces its `usePlayers(seasonId)` call. Deliberately simpler than
+  `usePlayers` — it never queries `player_season_ratings`, since nothing
+  that renders it needs a rating.
 - `web/src/components/SeasonPillSwitcher.tsx` — the pill UI.
 - `web/src/components/SeasonInFlightOverview.tsx` — the admin stat-tile row
   / empty-state.
@@ -154,10 +190,17 @@ get an at-a-glance view of whatever season is (or isn't) currently running.
 - `web/src/pages/Leaderboard.tsx`, `web/src/pages/GradeDistribution.tsx`,
   `web/src/pages/MatchHistory.tsx` — swap `useActiveSeason()` for
   `useSeasonSelector()`, render `SeasonPillSwitcher`.
+- `web/src/pages/PlayerProfile.tsx`, `web/src/pages/Settings.tsx`,
+  `web/src/pages/admin/ManagePlayers.tsx` — swap `useActiveSeason()` for
+  `useSeasonSelector()`, same default-to-most-recent behavior, **no**
+  `SeasonPillSwitcher` rendered.
 - `web/src/pages/Explore.tsx` — add the season filter (a plain `<select>` is
   fine here, it's a filter control among several, not the page's primary
   identity the way the pill is on Leaderboard/Grades/Matches) narrowing the
-  Matches section.
+  Matches section; separately, swap the Players section's
+  `useActiveSeason()`/`usePlayers(seasonId)` for the new season-independent
+  `usePlayerRoster()`, and fix the page's combined `isLoading`/`isError` to
+  no longer be capable of leaving the Players section in limbo.
 - `web/src/pages/Dashboard.tsx` — all three role variants drop their season
   dependency; mount `RecentActivityFeed` (shared) and, for admins,
   `SeasonInFlightOverview`.
@@ -166,15 +209,22 @@ get an at-a-glance view of whatever season is (or isn't) currently running.
 - `web/src/lib/queryKeys.ts` — add keys for the new queries (exact names in
   the implementation plan).
 
-**Left untouched, deliberately:** `useActiveSeason.ts` itself — still used
-nowhere in this spec's scope beyond needing to note it becomes dead code once
-every current caller (`Leaderboard`, `GradeDistribution`, `MatchHistory`,
-`Dashboard`) migrates off it; whether to delete it or leave it is an
-implementation-plan-level decision, not a design one. `useLeaderboard`,
-`useGradeDistribution`, `useMatchHistory`, `usePlayers`, `useAllMatches`,
-`useSeasons` — all unchanged, still take/return exactly what they do today.
-`start-season`, `enter-match`, `correct-match`, `close-week` Edge Functions —
-completely untouched; this is a read-path/browsing spec only.
+**Left untouched, deliberately:**
+- `useActiveSeason.ts` itself becomes dead code once every current caller
+  migrates off it (`Leaderboard`, `GradeDistribution`, `MatchHistory`,
+  `Dashboard`, `PlayerProfile`, `Settings`, `admin/ManagePlayers`, `Explore`)
+  — **except** `admin/EnterMatch.tsx`, `admin/CorrectMatch.tsx`, and
+  `admin/CloseWeek.tsx`, which keep using it exactly as today (see the
+  "genuinely out of scope" callout above) — so it is not deleted. Whether to
+  eventually rename/consolidate it is an implementation-plan-level call, not
+  a design one.
+- `useLeaderboard`, `useGradeDistribution`, `useMatchHistory`, `usePlayers`,
+  `useAllMatches`, `useSeasons` — all unchanged, still take/return exactly
+  what they do today. (`usePlayers` keeps its existing season-scoped
+  signature for `admin/ManagePlayers.tsx`'s photo-management use, which does
+  need each row's current rating — only `Explore` stops using it.)
+- `start-season`, `enter-match`, `correct-match`, `close-week` Edge Functions
+  — completely untouched; this is a read-path/browsing spec only.
 
 ## 4. Data flow
 
@@ -190,11 +240,23 @@ completely untouched; this is a read-path/browsing spec only.
    `start_date`-ordered list); clicking the pill itself opens a dropdown of
    every season (reusing the same list) calling `selectSeason(id)`.
 
+**Browsing without a switcher (PlayerProfile/Settings/ManagePlayers):**
+Identical to the above through step 2 — call `useSeasonSelector()`, pass
+`selectedSeasonId` into the existing data hook — but stop there. No
+`SeasonPillSwitcher` is rendered on these pages.
+
 **Explore:**
 1. A local `seasonFilter: string | null` (`null` = "All seasons") in
-   `ExplorePage`, driven by a `<select>` populated from `useSeasons()`.
+   `ExplorePage`, driven by a `<select>` populated from `useSeasons()`. This
+   is unrelated to `useSeasonSelector()` — it's a filter over already-fetched
+   matches, not a "which season's data am I looking at" resolution.
 2. The existing `matches(...)` client-side filter gains one more predicate:
    `(seasonFilter === null || m.season_id === seasonFilter)`.
+3. The Players section switches to `usePlayerRoster()` (no season parameter
+   at all) instead of `useActiveSeason()` + `usePlayers(seasonId)`. The
+   page's combined `isLoading`/`isError` is computed from `usePlayerRoster`,
+   `useSeasons`, and `useAllMatches` only — there is no fourth,
+   easy-to-forget hook whose error state can silently fail to propagate.
 
 **Dashboard:**
 1. `useRecentActivity()` — one query for the N most recent matches (any
@@ -226,7 +288,15 @@ completely untouched; this is a read-path/browsing spec only.
   `seasons` array is empty, so there's no `seasons[0]` to default to. Browsing
   pages show an explicit "No seasons exist yet" state (distinct from both the
   loading skeleton and the destructive-text error message) rather than
-  crashing on `undefined.id`.
+  crashing on `undefined.id`. For the three no-switcher consumers
+  (`PlayerProfile`/`Settings`/`admin/ManagePlayers`), this same empty
+  `selectedSeasonId` case must not crash either — each already has (or gains)
+  a "no rating yet" / equivalent fallback for a player with no season-scoped
+  row, which covers this case too without new page-level branching.
+- `admin/EnterMatch.tsx`/`CorrectMatch.tsx`/`CloseWeek.tsx` are unaffected by
+  any of the above — they keep calling `useActiveSeason()` directly and keep
+  hard-failing when it throws. This is intentional, not an inconsistency to
+  reconcile later.
 
 ## 6. Testing
 
@@ -245,7 +315,18 @@ per-hook/per-component test conventions:
 - `Leaderboard`/`GradeDistribution`/`MatchHistory`: existing tests updated —
   the "no active season → error" case is replaced with a "no active season →
   still renders the most recent season's data" case.
+- `PlayerProfile`/`Settings`/`admin/ManagePlayers`: same "no active season →
+  still renders, using the most recent season" update to their existing
+  tests; confirm no `SeasonPillSwitcher` is rendered on any of the three.
 - `Dashboard`: all three role variants' tests updated to assert the shared
   feed renders instead of the old season-scoped cards; a new case confirms
   the page renders even when `useSeasonInFlight` reports no active season.
-- `Explore`: a new case for the season filter narrowing the Matches section.
+- `Explore`: a new case for the season filter narrowing the Matches section,
+  plus updating the existing Players-section tests to use `usePlayerRoster`
+  instead of `useActiveSeason`/`usePlayers`, and a regression test proving
+  the Players section still renders correctly when there's no active season
+  (the bug found during this spec's review).
+- `admin/EnterMatch`/`CorrectMatch`/`CloseWeek`: no test changes expected —
+  included here only to confirm their existing "no active season → error"
+  tests are run as a regression check and still pass unmodified, proving
+  this spec didn't touch their behavior.
