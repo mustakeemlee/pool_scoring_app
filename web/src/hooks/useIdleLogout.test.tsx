@@ -87,6 +87,43 @@ describe('useIdleLogout', () => {
     expect(mockSignOut).not.toHaveBeenCalled();
   });
 
+  it('picks up a fresh activity write from another tab via the storage event', () => {
+    mockUseAuth.mockReturnValue({ session: { user: { id: 'u1' } } });
+    localStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now()));
+
+    render(<Probe />);
+
+    act(() => {
+      vi.advanceTimersByTime(IDLE_TIMEOUT_MS - WARNING_LEAD_MS);
+    });
+    expect(screen.getByText('warning: true')).toBeInTheDocument();
+
+    act(() => {
+      localStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now()));
+      window.dispatchEvent(new StorageEvent('storage', { key: ACTIVITY_STORAGE_KEY }));
+    });
+    expect(screen.getByText('warning: false')).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(IDLE_TIMEOUT_MS - WARNING_LEAD_MS - 1_000);
+    });
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('re-checks immediately on visibilitychange, without waiting for the next interval tick', () => {
+    mockUseAuth.mockReturnValue({ session: { user: { id: 'u1' } } });
+    localStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now()));
+
+    render(<Probe />);
+
+    act(() => {
+      localStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now() - IDLE_TIMEOUT_MS - 1_000));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(mockSignOut).toHaveBeenCalled();
+  });
+
   it('stayActive dismisses the warning immediately', () => {
     mockUseAuth.mockReturnValue({ session: { user: { id: 'u1' } } });
     localStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now()));
