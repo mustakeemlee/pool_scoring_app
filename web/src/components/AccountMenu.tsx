@@ -38,13 +38,13 @@ export function AccountMenu() {
       <div className="flex items-center gap-1.5">
         <NavLink
           to="/login"
-          className="rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+          className="rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
         >
           Log in
         </NavLink>
         <NavLink
           to="/signup"
-          className="rounded-full border border-white/15 px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:border-accent hover:text-accent"
+          className="rounded-full border border-border px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:border-accent hover:text-accent"
         >
           Sign up
         </NavLink>
@@ -57,7 +57,7 @@ export function AccountMenu() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="rounded-full border border-white/15 px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:border-accent hover:text-accent"
+        className="rounded-full border border-border px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:border-accent hover:text-accent"
       >
         Account
       </button>
@@ -66,14 +66,14 @@ export function AccountMenu() {
           <NavLink
             to="/dashboard"
             onClick={() => setOpen(false)}
-            className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-white/10"
+            className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-foreground/10"
           >
             Dashboard
           </NavLink>
           <NavLink
             to="/settings"
             onClick={() => setOpen(false)}
-            className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-white/10"
+            className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-foreground/10"
           >
             Settings
           </NavLink>
@@ -81,7 +81,7 @@ export function AccountMenu() {
             <NavLink
               to="/admin/enter-match"
               onClick={() => setOpen(false)}
-              className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-white/10"
+              className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-foreground/10"
             >
               Admin
             </NavLink>
@@ -89,7 +89,7 @@ export function AccountMenu() {
           <button
             type="button"
             onClick={() => void handleLogOut()}
-            className="rounded-lg px-3 py-2 text-left text-sm font-medium text-destructive hover:bg-white/10"
+            className="rounded-lg px-3 py-2 text-left text-sm font-medium text-destructive hover:bg-foreground/10"
           >
             Log out
           </button>

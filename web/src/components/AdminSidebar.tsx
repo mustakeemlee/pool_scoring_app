@@ -21,7 +21,7 @@ export function AdminSidebar() {
             to={link.to}
             className={({ isActive }) =>
               cn(
-                'rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-white/10',
+                'rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-foreground/10',
                 isActive && 'bg-primary text-primary-foreground hover:bg-primary',
               )
             }
