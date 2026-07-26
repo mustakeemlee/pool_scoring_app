@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { Season } from '@/lib/types';
 
 const mockUseAuth = vi.fn();
 const mockUseIsAdmin = vi.fn();
@@ -29,9 +30,9 @@ vi.mock('@/lib/supabaseClient', () => ({
 
 import { SettingsPage } from './Settings';
 
-const ACTIVE_SEASON = { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' as const };
+const ACTIVE_SEASON: Season = { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' };
 
-function seasonSelectorReturn(season: typeof ACTIVE_SEASON | null, seasons: (typeof ACTIVE_SEASON)[]) {
+function seasonSelectorReturn(season: Season | null, seasons: Season[]) {
   return {
     selectedSeason: season,
     selectedSeasonId: season?.id,

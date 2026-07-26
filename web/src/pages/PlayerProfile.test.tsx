@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { Season } from '@/lib/types';
 
 const usePlayerProfileMock = vi.fn();
 const mockUseSeasonSelector = vi.fn();
@@ -13,9 +14,9 @@ vi.mock('@/hooks/usePlayerProfile', () => ({
 
 import { PlayerProfilePage } from './PlayerProfile';
 
-const SEASON = { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' as const };
+const SEASON: Season = { id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' };
 
-function seasonSelectorReturn(season: typeof SEASON | null, seasons: (typeof SEASON)[]) {
+function seasonSelectorReturn(season: Season | null, seasons: Season[]) {
   return {
     selectedSeason: season,
     selectedSeasonId: season?.id,
