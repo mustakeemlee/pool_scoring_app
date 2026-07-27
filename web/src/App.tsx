@@ -18,6 +18,7 @@ import { SignupPage } from '@/pages/Signup';
 import { ForgotPasswordPage } from '@/pages/ForgotPassword';
 import { ResetPasswordPage } from '@/pages/ResetPassword';
 import { EnterMatchPage } from '@/pages/admin/EnterMatch';
+import { CreateFixturePage } from '@/pages/admin/CreateFixture';
 import { CorrectMatchPage } from '@/pages/admin/CorrectMatch';
 import { CloseWeekPage } from '@/pages/admin/CloseWeek';
 import { StartSeasonPage } from '@/pages/admin/StartSeason';
@@ -49,6 +50,7 @@ export function App() {
           <Route element={<AdminRouteGuard />}>
             <Route element={<AdminLayout />}>
               <Route path="/admin/enter-match" element={<EnterMatchPage />} />
+              <Route path="/admin/create-fixture" element={<CreateFixturePage />} />
               <Route path="/admin/correct-match" element={<CorrectMatchPage />} />
               <Route path="/admin/close-week" element={<CloseWeekPage />} />
               <Route path="/admin/start-season" element={<StartSeasonPage />} />

@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 
 const links = [
   { to: '/admin/enter-match', label: 'Enter Match' },
+  { to: '/admin/create-fixture', label: 'Schedule Fixture' },
   { to: '/admin/correct-match', label: 'Correct a Match' },
   { to: '/admin/close-week', label: 'Close Week' },
   { to: '/admin/start-season', label: 'Start Season' },
