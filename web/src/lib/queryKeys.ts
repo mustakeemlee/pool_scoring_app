@@ -17,4 +17,5 @@ export const queryKeys = {
   pendingClaims: () => ['pendingClaims'] as const,
   gradeRoster: (seasonId: string, grade: string) => ['gradeRoster', seasonId, grade] as const,
   playerOfTheWeek: (seasonId: string) => ['playerOfTheWeek', seasonId] as const,
+  fixtures: (seasonId: string) => ['fixtures', seasonId] as const,
 };
