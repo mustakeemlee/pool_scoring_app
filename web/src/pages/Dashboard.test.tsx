@@ -9,6 +9,7 @@ const mockUseUserProfile = vi.fn();
 const mockUsePendingClaims = vi.fn();
 const mockUseRecentActivity = vi.fn();
 const mockUseSeasonInFlight = vi.fn();
+const mockUsePlayerOfTheWeek = vi.fn();
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => mockUseAuth() }));
 vi.mock('@/hooks/useIsAdmin', () => ({ useIsAdmin: () => mockUseIsAdmin() }));
@@ -16,6 +17,7 @@ vi.mock('@/hooks/useUserProfile', () => ({ useUserProfile: () => mockUseUserProf
 vi.mock('@/hooks/usePendingClaims', () => ({ usePendingClaims: () => mockUsePendingClaims() }));
 vi.mock('@/hooks/useRecentActivity', () => ({ useRecentActivity: () => mockUseRecentActivity() }));
 vi.mock('@/hooks/useSeasonInFlight', () => ({ useSeasonInFlight: () => mockUseSeasonInFlight() }));
+vi.mock('@/hooks/usePlayerOfTheWeek', () => ({ usePlayerOfTheWeek: () => mockUsePlayerOfTheWeek() }));
 
 import { DashboardPage } from './Dashboard';
 
@@ -40,6 +42,7 @@ describe('DashboardPage', () => {
       isLoading: false,
       isError: false,
     });
+    mockUsePlayerOfTheWeek.mockReturnValue({ data: null, isLoading: false, isError: false });
   });
 
   it('shows the admin panel, the season-in-flight overview, and the shared activity feed for an admin account', () => {
@@ -66,6 +69,25 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Season 2026')).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Enter Match' })).toHaveAttribute('href', '/admin/enter-match');
+  });
+
+  it('shows the highlights carousel with Player of the Week on the admin dashboard', () => {
+    mockUseIsAdmin.mockReturnValue({ data: true, isLoading: false, isError: false });
+    mockUseUserProfile.mockReturnValue({
+      data: { linkedPlayerId: null, pendingClaim: null },
+      isLoading: false,
+      isError: false,
+    });
+    mockUsePendingClaims.mockReturnValue({ data: [], isLoading: false, isError: false });
+    mockUsePlayerOfTheWeek.mockReturnValue({
+      data: { player_id: 'p1', full_name: 'Alex Testplayer', photo_url: null, ratingGain: 42 },
+      isLoading: false,
+      isError: false,
+    });
+
+    renderDashboard();
+    expect(screen.getByText('Player of the Week')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Alex Testplayer' })).toHaveAttribute('href', '/players/p1');
   });
 
   it('shows an error message when pending claims fail to load in the admin panel', () => {

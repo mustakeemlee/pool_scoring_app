@@ -1,6 +1,7 @@
 // web/src/pages/Dashboard.tsx
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
+import { HighlightsCarousel } from '@/components/HighlightsCarousel';
 import { RecentActivityFeed } from '@/components/RecentActivityFeed';
 import { SeasonInFlightOverview } from '@/components/SeasonInFlightOverview';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,6 +25,7 @@ function AdminDashboard() {
     <div>
       <h1 className="mb-1 text-2xl font-extrabold">Admin Dashboard</h1>
       <p className="text-muted-foreground mb-6 text-sm">League operations at a glance.</p>
+      <HighlightsCarousel />
       <SeasonInFlightOverview />
       {pendingClaims.isLoading ? (
         <Skeleton className="mb-6 h-[72px] w-full rounded-xl" />
@@ -55,6 +57,7 @@ function LinkedPlayerDashboard({ playerId }: { playerId: string }) {
   return (
     <div>
       <h1 className="mb-1 text-2xl font-extrabold">Welcome back</h1>
+      <HighlightsCarousel />
       <Link
         to={`/players/${playerId}`}
         className="card-surface mb-6 block p-4 text-sm font-semibold hover:border-accent"
@@ -70,6 +73,7 @@ function UnlinkedDashboard({ pendingClaim }: { pendingClaim: PlayerClaim | null 
   return (
     <div>
       <h1 className="mb-1 text-2xl font-extrabold">Welcome</h1>
+      <HighlightsCarousel />
       {pendingClaim ? (
         <p className="text-muted-foreground mb-6 text-sm">Your player claim is pending review by an admin.</p>
       ) : (
