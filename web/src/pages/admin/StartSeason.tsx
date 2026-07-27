@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { SeasonInFlightOverview } from '@/components/SeasonInFlightOverview';
 import { useSeasons } from '@/hooks/useSeasons';
 import { startSeason } from '@/lib/edgeFunctions';
 import { queryKeys } from '@/lib/queryKeys';
@@ -38,6 +39,7 @@ export function StartSeasonPage() {
       toast.success(`Season "${newSeasonName}" created.`);
       queryClient.invalidateQueries({ queryKey: queryKeys.seasons() });
       queryClient.invalidateQueries({ queryKey: queryKeys.activeSeason() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.seasonInFlight() });
       setNewSeasonName('');
       setPreviousSeasonId('');
     } catch (submitError) {
@@ -58,6 +60,7 @@ export function StartSeasonPage() {
   return (
     <div className="max-w-md">
       <h1 className="mb-4 text-xl font-bold">Start Season</h1>
+      <SeasonInFlightOverview />
       <div className="flex flex-col gap-4">
         <div>
           <Label htmlFor="newSeasonName">New season name</Label>

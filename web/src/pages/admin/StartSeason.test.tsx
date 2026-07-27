@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { queryKeys } from '@/lib/queryKeys';
 
 const mockToastSuccess = vi.fn();
@@ -11,6 +12,14 @@ vi.mock('sonner', () => ({ toast: { success: (msg: string) => mockToastSuccess(m
 vi.mock('@/hooks/useSeasons', () => ({
   useSeasons: () => ({
     data: [{ id: 's1', name: 'Season 2026', start_date: '2026-01-01', end_date: null, status: 'active' }],
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
+vi.mock('@/hooks/useSeasonInFlight', () => ({
+  useSeasonInFlight: () => ({
+    data: { season: null, matchesPlayed: 0, activePlayerCount: 0, daysElapsed: 0 },
     isLoading: false,
     isError: false,
   }),
@@ -25,9 +34,11 @@ function renderPage() {
   const queryClient = new QueryClient();
   const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
   const utils = render(
-    <QueryClientProvider client={queryClient}>
-      <StartSeasonPage />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <StartSeasonPage />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
   return { ...utils, queryClient, invalidateSpy };
 }
@@ -42,6 +53,11 @@ describe('StartSeasonPage', () => {
     renderPage();
     expect(screen.getByRole('option', { name: 'Season 2026' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'None (fresh start)' })).toBeInTheDocument();
+  });
+
+  it('shows the season-in-flight overview above the form', () => {
+    renderPage();
+    expect(screen.getByText('No active season')).toBeInTheDocument();
   });
 
   it('omits previous_season_id when "None" is selected, and confirms before submitting', async () => {
@@ -63,7 +79,7 @@ describe('StartSeasonPage', () => {
     expect(mockToastSuccess).toHaveBeenCalledWith('Season "Season 2027" created.');
   });
 
-  it('invalidates seasons and activeSeason caches after a successful start, with exact keys', async () => {
+  it('invalidates seasons, activeSeason, and seasonInFlight caches after a successful start, with exact keys', async () => {
     mockStartSeason.mockResolvedValue({ season_id: 's2' });
     const user = userEvent.setup();
     const { invalidateSpy } = renderPage();
@@ -77,9 +93,10 @@ describe('StartSeasonPage', () => {
     // Regression coverage per the Task 14/15/16 lesson: assert the exact query keys via the real
     // queryKeys builder (not hand-typed arrays), and the exact call count/order, so this test
     // fails if an invalidation is dropped, duplicated, reordered, or its key drifts.
-    expect(invalidateSpy).toHaveBeenCalledTimes(2);
+    expect(invalidateSpy).toHaveBeenCalledTimes(3);
     expect(invalidateSpy).toHaveBeenNthCalledWith(1, { queryKey: queryKeys.seasons() });
     expect(invalidateSpy).toHaveBeenNthCalledWith(2, { queryKey: queryKeys.activeSeason() });
+    expect(invalidateSpy).toHaveBeenNthCalledWith(3, { queryKey: queryKeys.seasonInFlight() });
   });
 
   it('resets the form fields after a successful start', async () => {
@@ -124,6 +141,8 @@ describe('StartSeasonPage', () => {
     await user.click(screen.getByRole('button', { name: 'Start Season' }));
     await user.click(screen.getByRole('button', { name: 'Confirm Start Season' }));
 
-    await waitFor(() => expect(screen.getByText('duplicate key value violates unique constraint')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('duplicate key value violates unique constraint')).toBeInTheDocument(),
+    );
   });
 });
