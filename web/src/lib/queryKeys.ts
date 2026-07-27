@@ -15,4 +15,5 @@ export const queryKeys = {
   isAdmin: (userId: string) => ['isAdmin', userId] as const,
   userProfile: (userId: string) => ['userProfile', userId] as const,
   pendingClaims: () => ['pendingClaims'] as const,
+  gradeRoster: (seasonId: string, grade: string) => ['gradeRoster', seasonId, grade] as const,
 };
