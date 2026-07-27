@@ -1,18 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
-vi.mock('@/hooks/usePlayerRoster', () => ({
-  usePlayerRoster: () => ({
-    data: [
-      { id: 'p1', full_name: 'Alex Testplayer', photo_url: null },
-      { id: 'p2', full_name: 'Jordan Testplayer', photo_url: null },
-    ],
-    isLoading: false,
-    isError: false,
-  }),
-}));
+const mockUsePlayerRoster = vi.fn();
+vi.mock('@/hooks/usePlayerRoster', () => ({ usePlayerRoster: () => mockUsePlayerRoster() }));
 
 vi.mock('@/hooks/useSeasons', () => ({
   useSeasons: () => ({
@@ -73,6 +65,17 @@ function renderPage() {
 }
 
 describe('ExplorePage', () => {
+  beforeEach(() => {
+    mockUsePlayerRoster.mockReturnValue({
+      data: [
+        { id: 'p1', full_name: 'Alex Testplayer', photo_url: null },
+        { id: 'p2', full_name: 'Jordan Testplayer', photo_url: null },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+  });
+
   it('prompts to search before anything is typed', () => {
     renderPage();
     expect(screen.getByText('Start typing to search players, matches, and seasons.')).toBeInTheDocument();
@@ -125,5 +128,16 @@ describe('ExplorePage', () => {
     expect(screen.getByText('3–1')).toBeInTheDocument();
     expect(screen.queryByText('4–2')).not.toBeInTheDocument();
     expect(screen.getByText('Players (1)')).toBeInTheDocument();
+  });
+
+  it('surfaces a player-roster fetch failure as the page error state, instead of leaving the Players section in limbo (regression: this used to silently stay disabled when there was no active season)', async () => {
+    mockUsePlayerRoster.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByPlaceholderText(/search players, matches, seasons/i), 'Alex');
+
+    expect(screen.getByText("Couldn't load search data. Try refreshing.")).toBeInTheDocument();
+    expect(screen.queryByText('Players (1)')).not.toBeInTheDocument();
   });
 });
