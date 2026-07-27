@@ -1,21 +1,13 @@
 // web/src/pages/Dashboard.tsx
-import { lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
-import { GradeBadge } from '@/components/GradeBadge';
-import { MatchTable } from '@/components/MatchTable';
+import { RecentActivityFeed } from '@/components/RecentActivityFeed';
+import { SeasonInFlightOverview } from '@/components/SeasonInFlightOverview';
 import { useAuth } from '@/hooks/useAuth';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { usePendingClaims } from '@/hooks/usePendingClaims';
-import { useActiveSeason } from '@/hooks/useActiveSeason';
-import { useLeaderboard } from '@/hooks/useLeaderboard';
-import { useMatchHistory } from '@/hooks/useMatchHistory';
-import { usePlayerProfile } from '@/hooks/usePlayerProfile';
-import { toRatingHistoryPoints } from '@/lib/ratingHistory';
 import type { PlayerClaim } from '@/lib/types';
-
-const RatingChart = lazy(() => import('@/components/RatingChart').then((m) => ({ default: m.RatingChart })));
 
 const ADMIN_ACTIONS = [
   { to: '/admin/enter-match', label: 'Enter Match' },
@@ -25,25 +17,14 @@ const ADMIN_ACTIONS = [
   { to: '/admin/players', label: 'Players' },
 ];
 
-function AdminDashboard({
-  seasonId,
-  seasonName,
-  seasonStatus,
-}: {
-  seasonId: string;
-  seasonName: string;
-  seasonStatus: string;
-}) {
+function AdminDashboard() {
   const pendingClaims = usePendingClaims();
-  const matchHistory = useMatchHistory(seasonId);
-  const recentMatches = (matchHistory.data ?? []).slice(0, 5);
 
   return (
     <div>
       <h1 className="mb-1 text-2xl font-extrabold">Admin Dashboard</h1>
-      <p className="text-muted-foreground mb-6 text-sm">
-        {seasonName} — {seasonStatus}
-      </p>
+      <p className="text-muted-foreground mb-6 text-sm">League operations at a glance.</p>
+      <SeasonInFlightOverview />
       {pendingClaims.isLoading ? (
         <Skeleton className="mb-6 h-[72px] w-full rounded-xl" />
       ) : pendingClaims.isError ? (
@@ -65,68 +46,27 @@ function AdminDashboard({
           </Link>
         ))}
       </div>
-      <h2 className="text-muted-foreground mb-3 text-sm font-bold uppercase tracking-wider">Recent matches</h2>
-      {matchHistory.isLoading ? (
-        <Skeleton className="h-64 w-full rounded-xl" />
-      ) : matchHistory.isError ? (
-        <p className="text-destructive text-sm">Couldn't load recent matches. Try refreshing.</p>
-      ) : (
-        <MatchTable matches={recentMatches} />
-      )}
+      <RecentActivityFeed />
     </div>
   );
 }
 
-function LinkedPlayerDashboard({ playerId, seasonId }: { playerId: string; seasonId: string }) {
-  const profile = usePlayerProfile(playerId, seasonId);
-  const leaderboard = useLeaderboard(seasonId);
-
-  if (profile.isLoading) return <Skeleton className="h-64 w-full rounded-xl" />;
-  if (profile.isError || !profile.data) {
-    return <p className="text-destructive">Couldn't load your profile. Try refreshing.</p>;
-  }
-
-  const { player, seasonRating, matches } = profile.data;
-  const rank = leaderboard.data?.find((entry) => entry.player_id === playerId)?.rank;
-  const chartPoints = toRatingHistoryPoints(profile.data.ratingEvents);
-
+function LinkedPlayerDashboard({ playerId }: { playerId: string }) {
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-extrabold">{player.full_name}</h1>
-      <div className="mb-6 flex items-center gap-3">
-        {seasonRating && <GradeBadge grade={seasonRating.grade} />}
-        {rank !== undefined && <span className="text-muted-foreground text-sm">Rank #{rank}</span>}
-      </div>
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="card-surface p-4">
-          <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">Rating</p>
-          <p className="mt-1 text-2xl font-extrabold tabular-nums">{seasonRating?.rating ?? '—'}</p>
-        </div>
-        <div className="card-surface p-4">
-          <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">Season Pts</p>
-          <p className="mt-1 text-2xl font-extrabold tabular-nums">{seasonRating?.season_points ?? '—'}</p>
-        </div>
-        <Link to={`/players/${playerId}`} className="card-surface p-4 hover:border-accent">
-          <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">Full profile</p>
-          <p className="mt-1 text-sm font-semibold">View →</p>
-        </Link>
-      </div>
-      <h2 className="text-muted-foreground mb-3 text-sm font-bold uppercase tracking-wider">Rating history</h2>
-      <div className="card-surface mb-6 p-4">
-        <Suspense fallback={<Skeleton className="h-[200px] w-full" />}>
-          <RatingChart points={chartPoints} />
-        </Suspense>
-      </div>
-      <h2 className="text-muted-foreground mb-3 text-sm font-bold uppercase tracking-wider">Recent matches</h2>
-      <MatchTable matches={matches} />
+      <h1 className="mb-1 text-2xl font-extrabold">Welcome back</h1>
+      <Link
+        to={`/players/${playerId}`}
+        className="card-surface mb-6 block p-4 text-sm font-semibold hover:border-accent"
+      >
+        View your full profile →
+      </Link>
+      <RecentActivityFeed />
     </div>
   );
 }
 
-function UnlinkedDashboard({ pendingClaim, seasonId }: { pendingClaim: PlayerClaim | null; seasonId: string }) {
-  const leaderboard = useLeaderboard(seasonId);
-  const top5 = (leaderboard.data ?? []).slice(0, 5);
-
+function UnlinkedDashboard({ pendingClaim }: { pendingClaim: PlayerClaim | null }) {
   return (
     <div>
       <h1 className="mb-1 text-2xl font-extrabold">Welcome</h1>
@@ -143,23 +83,7 @@ function UnlinkedDashboard({ pendingClaim, seasonId }: { pendingClaim: PlayerCla
           </Link>
         </div>
       )}
-      <h2 className="text-muted-foreground mb-3 text-sm font-bold uppercase tracking-wider">Leaderboard</h2>
-      {leaderboard.isLoading ? (
-        <Skeleton className="h-64 w-full rounded-xl" />
-      ) : leaderboard.isError ? (
-        <p className="text-destructive text-sm">Couldn't load the leaderboard. Try refreshing.</p>
-      ) : (
-        <ul className="card-surface overflow-hidden">
-          {top5.map((entry) => (
-            <li key={entry.player_id} className="flex items-center justify-between border-b border-border px-4 py-3 last:border-0">
-              <span className="font-medium">
-                #{entry.rank} {entry.full_name}
-              </span>
-              <GradeBadge grade={entry.grade} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <RecentActivityFeed />
     </div>
   );
 }
@@ -169,25 +93,20 @@ export function DashboardPage() {
   const userId = session?.user.id;
   const isAdmin = useIsAdmin(userId);
   const userProfile = useUserProfile(userId);
-  const activeSeason = useActiveSeason();
 
-  if (isAdmin.isLoading || userProfile.isLoading || activeSeason.isLoading) {
+  if (isAdmin.isLoading || userProfile.isLoading) {
     return <Skeleton className="h-64 w-full rounded-xl" />;
   }
 
-  if (userProfile.isError || activeSeason.isError || !activeSeason.data) {
+  if (userProfile.isError) {
     return <p className="text-destructive">Couldn't load your dashboard. Try refreshing.</p>;
   }
 
-  const seasonId = activeSeason.data.id;
-
   if (isAdmin.data === true) {
-    return (
-      <AdminDashboard seasonId={seasonId} seasonName={activeSeason.data.name} seasonStatus={activeSeason.data.status} />
-    );
+    return <AdminDashboard />;
   }
   if (userProfile.data?.linkedPlayerId) {
-    return <LinkedPlayerDashboard playerId={userProfile.data.linkedPlayerId} seasonId={seasonId} />;
+    return <LinkedPlayerDashboard playerId={userProfile.data.linkedPlayerId} />;
   }
-  return <UnlinkedDashboard pendingClaim={userProfile.data?.pendingClaim ?? null} seasonId={seasonId} />;
+  return <UnlinkedDashboard pendingClaim={userProfile.data?.pendingClaim ?? null} />;
 }
