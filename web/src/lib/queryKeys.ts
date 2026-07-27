@@ -9,6 +9,7 @@ export const queryKeys = {
   seasons: () => ['seasons'] as const,
   activeSeason: () => ['activeSeason'] as const,
   players: (seasonId: string) => ['players', seasonId] as const,
+  playerRoster: () => ['playerRoster'] as const,
   isAdmin: (userId: string) => ['isAdmin', userId] as const,
   userProfile: (userId: string) => ['userProfile', userId] as const,
   pendingClaims: () => ['pendingClaims'] as const,
