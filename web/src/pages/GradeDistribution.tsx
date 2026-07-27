@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GradeBadge } from '@/components/GradeBadge';
 import { SeasonPillSwitcher } from '@/components/SeasonPillSwitcher';
@@ -50,7 +51,11 @@ export function GradeDistributionPage() {
       </div>
       <div className="card-surface flex flex-col gap-4 p-6">
         {rows.map((row) => (
-          <div key={row.grade} className="flex items-center gap-4">
+          <Link
+            key={row.grade}
+            to={`/grades/${row.grade}`}
+            className="-mx-2 flex items-center gap-4 rounded-lg px-2 py-1 hover:bg-foreground/5"
+          >
             <div className="w-10">
               <GradeBadge grade={row.grade} />
             </div>
@@ -61,7 +66,7 @@ export function GradeDistributionPage() {
               />
             </div>
             <span className="w-8 text-right text-sm font-bold tabular-nums">{row.player_count}</span>
-          </div>
+          </Link>
         ))}
       </div>
     </div>
