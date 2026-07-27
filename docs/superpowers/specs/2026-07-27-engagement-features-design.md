@@ -58,18 +58,33 @@ data), not an assumption made going in.
   with a date and two players, no scores.
 - **Fixture → Result workflow**: an admin opens a fixture from the Fixtures
   list and clicks "Enter Result"; this opens the existing Enter Match form
-  pre-filled with that fixture's date and players. On successful submission,
-  the fixture's `status` becomes `'completed'` and it records which `matches`
-  row resulted from it — **atomically**, by extending the existing
-  `enter-match` Edge Function's transaction to optionally accept a
-  `fixture_id` (validates the fixture is still `'scheduled'` and its players
-  match the submitted ones, inserts the match row exactly as it does today,
-  then updates the fixture in the same transaction). This is the same
-  transactional-write pattern this codebase already requires for every write
-  Edge Function (`supabase/functions/_shared/dbTransaction.ts`) — a two-step
-  client-side "create match, then separately mark fixture complete" was
-  rejected because it can leave a fixture stuck `'scheduled'` if the second
-  step fails.
+  pre-filled with that fixture's date and players. **Confirmed by reading
+  `web/src/pages/admin/EnterMatch.tsx` (exports `EnterMatchPage`): it has no
+  pre-fill capability
+  today** — it's a fully self-contained form (local `useState` for date and
+  both player selects, no props, no route params). This spec requires a
+  real modification to that page: it must accept an optional fixture
+  reference (e.g. a `fixtureId` route/query param), look up that fixture,
+  pre-populate the date and both player selects from it, and pass
+  `fixture_id` through to the `enter-match` call — not a zero-change reuse.
+  On successful submission, the fixture's `status` becomes `'completed'` and
+  it records which `matches` row resulted from it — **atomically**, by
+  extending the existing `enter-match` Edge Function's transaction to
+  optionally accept a `fixture_id` (validates the fixture is still
+  `'scheduled'` and its players match the submitted ones, inserts the match
+  row exactly as it does today, then updates the fixture in the same
+  transaction). This is the same transactional-write pattern this codebase
+  already requires for every write Edge Function
+  (`supabase/functions/_shared/dbTransaction.ts`) — a two-step client-side
+  "create match, then separately mark fixture complete" was rejected because
+  it can leave a fixture stuck `'scheduled'` if the second step fails.
+  **`EnterMatchPage`'s existing success handler already invalidates six
+  query keys** (leaderboard, gradeDistribution, matchHistory, two
+  playerProfile calls, players) — completing a fixture needs a seventh,
+  `queryKeys.fixtures(seasonId)`, or the Fixtures tab won't reflect the
+  completion without a manual refresh. This is exactly the class of missed
+  invalidation CLAUDE.md calls out as a recurring mistake in this codebase —
+  flagging it here so the implementation plan doesn't repeat it.
 - **Voiding**: an admin can also void a fixture (`status` → `'voided'`)
   without entering a result, for a game that gets cancelled — mirrors how
   matches can already be voided rather than deleted.
@@ -107,8 +122,17 @@ data), not an assumption made going in.
   no new computation).
 - **Results additionally show**: the actual score, and each player's rating
   delta from that specific match (rating-before → rating-after, from the
-  existing `rating_events` table, filtered to `match_id`). Fixtures show
-  none of this, since it doesn't exist yet.
+  existing `rating_events` table, filtered to `match_id` **and**
+  `event_type = 'instant'`). Fixtures show none of this, since it doesn't
+  exist yet. **Important nuance, confirmed by reading `close-week`'s own
+  insert**: weekly-reconciliation rating events carry no `match_id` at all —
+  they're a period-level adjustment, not tied to any one match. So this
+  delta is *only* the instant Elo nudge applied the moment the result was
+  entered; it will not, and is not meant to, reconcile with a player's total
+  rating change across the week that match fell in (which may also include
+  a later reconciliation adjustment). Worth a one-line caption in the UI
+  ("Rating change from this match") so it doesn't read as the player's
+  whole-week movement.
 - **Head-to-head** is the one genuinely new query: matches between these two
   specific players (in either player_a/player_b order), tallied into a
   simple win count per player. No new table — this reads `matches`.
@@ -148,6 +172,13 @@ data), not an assumption made going in.
   bigger "magazine cover" feel the user asked for.
 - Slide count is capped (same `FEED_LIMIT`-style convention as
   `useRecentActivity`) so the carousel can't grow unbounded.
+- **No new dependency required.** Checked `web/package.json` and
+  `web/src/components/ui/` — there's no carousel library or shadcn carousel
+  primitive anywhere in this codebase (no embla-carousel, swiper, or
+  similar). A simple interval-based auto-advance (`useState` slide index +
+  `setInterval`, with the existing dot-indicator/prev-next affordance from
+  the approved mockup) is sufficient and keeps this app's dependency
+  footprint unchanged — do not add a carousel package for this.
 
 ### 2.5 Email confirmation
 
@@ -340,6 +371,12 @@ today.
 
 - `useGradeRoster` follows the same loading/error/empty pattern as every
   other data hook in this app (`isLoading`/`isError`/empty-array-is-valid).
+- `GradeRosterPage` must handle "no seasons exist yet" the same way
+  `GradeDistribution.tsx` already does today (checked: it renders "No
+  seasons exist yet" when `useSeasonSelector()`'s `selectedSeasonId` is
+  unset) — the new page inherits the identical empty `selectedSeasonId`
+  case from the same hook and needs the same fallback, not a crash on an
+  `undefined` season id.
 - A fixture's `enter-match` completion re-checks the fixture is still
   `status='scheduled'` and its players still match what's being submitted
   *inside* the transaction (the same "re-check any state a lock could have
@@ -392,8 +429,14 @@ extended `enter-match` behavior:
   from any composed hook rather than rendering silently empty.
 - `Signup.tsx`: shows the "check your email" state when `signUp()` returns
   no session; still navigates to `/dashboard` in the (now rare) case a
-  session is returned; existing error-message tests continue to pass
-  unmodified.
+  session is returned. **Correction from this spec's own review**: the
+  existing success-path test in `Signup.test.tsx` asserts
+  `signUp` was called with exactly `{ email, password }` — that assertion
+  will legitimately need updating to also expect the new
+  `options: { emailRedirectTo }` field, since adding it is exactly what this
+  feature requires. Only the existing error-message test
+  (`'shows the error message verbatim on a failed signup'`) is genuinely
+  unaffected and should keep passing unmodified.
 - Regression check (no test changes expected, run to confirm nothing broke):
   `ForgotPassword.tsx`/`ResetPassword.tsx`'s existing tests, and every
   existing `matches`/rating-engine test — this spec must not change any of
