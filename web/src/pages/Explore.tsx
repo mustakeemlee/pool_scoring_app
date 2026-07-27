@@ -1,12 +1,10 @@
-// web/src/pages/Explore.tsx
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { MatchTable } from '@/components/MatchTable';
-import { useActiveSeason } from '@/hooks/useActiveSeason';
-import { usePlayers } from '@/hooks/usePlayers';
+import { usePlayerRoster } from '@/hooks/usePlayerRoster';
 import { useSeasons } from '@/hooks/useSeasons';
 import { useAllMatches } from '@/hooks/useAllMatches';
 
@@ -16,16 +14,16 @@ function matches(haystack: string, query: string): boolean {
 
 export function ExplorePage() {
   const [query, setQuery] = useState('');
-  const activeSeason = useActiveSeason();
-  const players = usePlayers(activeSeason.data?.id);
+  const [seasonFilter, setSeasonFilter] = useState('');
+  const playerRoster = usePlayerRoster();
   const seasons = useSeasons();
   const allMatches = useAllMatches();
 
   const normalizedQuery = query.trim().toLowerCase();
 
   const matchedPlayers = useMemo(
-    () => (players.data ?? []).filter((p) => matches(p.full_name, normalizedQuery)),
-    [players.data, normalizedQuery],
+    () => (playerRoster.data ?? []).filter((p) => matches(p.full_name, normalizedQuery)),
+    [playerRoster.data, normalizedQuery],
   );
   const matchedSeasons = useMemo(
     () => (seasons.data ?? []).filter((s) => matches(s.name, normalizedQuery)),
@@ -34,13 +32,15 @@ export function ExplorePage() {
   const matchedMatches = useMemo(
     () =>
       (allMatches.data ?? []).filter(
-        (m) => matches(m.player_a.full_name, normalizedQuery) || matches(m.player_b.full_name, normalizedQuery),
+        (m) =>
+          (seasonFilter === '' || m.season_id === seasonFilter) &&
+          (matches(m.player_a.full_name, normalizedQuery) || matches(m.player_b.full_name, normalizedQuery)),
       ),
-    [allMatches.data, normalizedQuery],
+    [allMatches.data, normalizedQuery, seasonFilter],
   );
 
-  const isLoading = players.isLoading || seasons.isLoading || allMatches.isLoading;
-  const isError = players.isError || seasons.isError || allMatches.isError;
+  const isLoading = playerRoster.isLoading || seasons.isLoading || allMatches.isLoading;
+  const isError = playerRoster.isError || seasons.isError || allMatches.isError;
 
   return (
     <div>
@@ -122,9 +122,24 @@ export function ExplorePage() {
           </section>
 
           <section>
-            <h2 className="text-muted-foreground mb-3 text-sm font-bold uppercase tracking-wider">
-              Matches{matchedMatches.length > 0 && ` (${matchedMatches.length})`}
-            </h2>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-muted-foreground text-sm font-bold uppercase tracking-wider">
+                Matches{matchedMatches.length > 0 && ` (${matchedMatches.length})`}
+              </h2>
+              <select
+                value={seasonFilter}
+                onChange={(e) => setSeasonFilter(e.target.value)}
+                aria-label="Filter matches by season"
+                className="border-input bg-background rounded-md border px-2 py-1 text-xs"
+              >
+                <option value="">All seasons</option>
+                {(seasons.data ?? []).map((season) => (
+                  <option key={season.id} value={season.id}>
+                    {season.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             {matchedMatches.length === 0 ? (
               <p className="text-muted-foreground text-sm">No matching matches.</p>
             ) : (
