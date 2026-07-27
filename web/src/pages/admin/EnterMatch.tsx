@@ -1,5 +1,6 @@
 // web/src/pages/admin/EnterMatch.tsx
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { OddsWidget } from '@/components/OddsWidget';
 import { useActiveSeason } from '@/hooks/useActiveSeason';
 import { usePlayers } from '@/hooks/usePlayers';
+import { useFixtures } from '@/hooks/useFixtures';
 import { enterMatch } from '@/lib/edgeFunctions';
 import { queryKeys } from '@/lib/queryKeys';
 
@@ -16,6 +18,10 @@ export function EnterMatchPage() {
   const queryClient = useQueryClient();
   const activeSeason = useActiveSeason();
   const players = usePlayers(activeSeason.data?.id);
+  const fixtures = useFixtures(activeSeason.data?.id);
+  const [searchParams] = useSearchParams();
+  const fixtureId = searchParams.get('fixtureId') ?? undefined;
+  const fixture = fixtureId ? fixtures.data?.find((f) => f.id === fixtureId) : undefined;
 
   const [matchDate, setMatchDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [playerAId, setPlayerAId] = useState('');
@@ -24,6 +30,20 @@ export function EnterMatchPage() {
   const [framesB, setFramesB] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Pre-fill exactly once when the named fixture becomes available -- guarded
+  // so a later background refetch of the fixtures list (e.g. on window focus)
+  // can't silently reset an admin's in-progress edits back to the fixture's
+  // original values.
+  const hasPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (fixture && !hasPrefilledRef.current) {
+      hasPrefilledRef.current = true;
+      setMatchDate(fixture.scheduled_date);
+      setPlayerAId(fixture.player_a.id);
+      setPlayerBId(fixture.player_b.id);
+    }
+  }, [fixture]);
 
   const playerA = players.data?.find((p) => p.id === playerAId);
   const playerB = players.data?.find((p) => p.id === playerBId);
@@ -65,6 +85,7 @@ export function EnterMatchPage() {
         player_b_id: playerBId,
         frames_a: parsedFramesA,
         frames_b: parsedFramesB,
+        ...(fixtureId ? { fixture_id: fixtureId } : {}),
       });
 
       const winnerName = parsedFramesA > parsedFramesB ? playerA?.full_name : playerB?.full_name;
@@ -78,6 +99,9 @@ export function EnterMatchPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.playerProfile(playerAId, activeSeason.data.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.playerProfile(playerBId, activeSeason.data.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.players(activeSeason.data.id) });
+      if (fixtureId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.fixtures(activeSeason.data.id) });
+      }
 
       setPlayerAId('');
       setPlayerBId('');

@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
 
@@ -14,17 +15,22 @@ vi.mock('@/hooks/useActiveSeason', () => ({ useActiveSeason: () => mockUseActive
 const mockUsePlayers = vi.fn();
 vi.mock('@/hooks/usePlayers', () => ({ usePlayers: () => mockUsePlayers() }));
 
+const mockUseFixtures = vi.fn();
+vi.mock('@/hooks/useFixtures', () => ({ useFixtures: () => mockUseFixtures() }));
+
 const mockEnterMatch = vi.fn();
 vi.mock('@/lib/edgeFunctions', () => ({ enterMatch: (body: unknown) => mockEnterMatch(body) }));
 
 import { EnterMatchPage } from './EnterMatch';
 
-function renderPage() {
+function renderPage(initialPath = '/admin/enter-match') {
   const queryClient = new QueryClient();
   const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <EnterMatchPage />
+      <MemoryRouter initialEntries={[initialPath]}>
+        <EnterMatchPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
   return { ...utils, queryClient, invalidateSpy };
@@ -47,6 +53,7 @@ describe('EnterMatchPage', () => {
       isLoading: false,
       isError: false,
     });
+    mockUseFixtures.mockReturnValue({ data: [], isLoading: false, isError: false });
   });
 
   it('shows a loading skeleton while the active season or players are still loading', () => {
@@ -103,9 +110,8 @@ describe('EnterMatchPage', () => {
     expect(mockToastSuccess).toHaveBeenCalledWith(expect.stringContaining('Alex Testplayer wins 5–2'));
     await waitFor(() => expect((screen.getByLabelText('Frames A') as HTMLInputElement).value).toBe(''));
 
-    // Regression coverage: a successful submission must invalidate all six caches that
-    // depend on match results, in this order, so the leaderboard, grade distribution,
-    // match history, and both players' profiles refresh without a manual reload.
+    // Regression coverage: a plain (non-fixture) submission must invalidate exactly
+    // these six caches, in this order -- unchanged from before fixtures existed.
     expect(invalidateSpy).toHaveBeenCalledTimes(6);
     expect(invalidateSpy).toHaveBeenNthCalledWith(1, { queryKey: queryKeys.leaderboard('s1') });
     expect(invalidateSpy).toHaveBeenNthCalledWith(2, { queryKey: queryKeys.gradeDistribution('s1') });
@@ -129,5 +135,38 @@ describe('EnterMatchPage', () => {
     await waitFor(() =>
       expect(screen.getByText('new row for relation "matches" violates check constraint')).toBeInTheDocument(),
     );
+  });
+
+  it('pre-fills the date and both players from the fixture named in ?fixtureId=, and submits its fixture_id', async () => {
+    mockUseFixtures.mockReturnValue({
+      data: [
+        {
+          id: 'f1', season_id: 's1', scheduled_date: '2026-08-01', status: 'scheduled', completed_match_id: null,
+          player_a: { id: 'p1', full_name: 'Alex Testplayer', photo_url: null },
+          player_b: { id: 'p2', full_name: 'Jordan Testplayer', photo_url: null },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    mockEnterMatch.mockResolvedValue({ match_id: 'm1' });
+    const user = userEvent.setup();
+    const { invalidateSpy } = renderPage('/admin/enter-match?fixtureId=f1');
+
+    await waitFor(() => expect(screen.getByLabelText('Player A')).toHaveValue('p1'));
+    expect(screen.getByLabelText('Player B')).toHaveValue('p2');
+    expect(screen.getByLabelText('Match date')).toHaveValue('2026-08-01');
+
+    await user.type(screen.getByLabelText('Frames A'), '5');
+    await user.type(screen.getByLabelText('Frames B'), '2');
+    await user.click(screen.getByRole('button', { name: 'Submit Match' }));
+
+    await waitFor(() =>
+      expect(mockEnterMatch).toHaveBeenCalledWith(expect.objectContaining({ fixture_id: 'f1' })),
+    );
+    // A fixture-completing submission invalidates the six existing caches
+    // plus a seventh, the fixtures list for this season.
+    expect(invalidateSpy).toHaveBeenCalledTimes(7);
+    expect(invalidateSpy).toHaveBeenNthCalledWith(7, { queryKey: queryKeys.fixtures('s1') });
   });
 });

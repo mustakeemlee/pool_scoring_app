@@ -42,6 +42,7 @@ export interface EnterMatchBody {
   player_b_id: string;
   frames_a: number;
   frames_b: number;
+  fixture_id?: string;
 }
 export interface EnterMatchResponse {
   match_id: string;
