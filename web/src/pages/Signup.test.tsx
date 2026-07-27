@@ -1,3 +1,4 @@
+// web/src/pages/Signup.test.tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -16,41 +17,62 @@ vi.mock('react-router-dom', async () => {
 
 import { SignupPage } from './Signup';
 
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <SignupPage />
+    </MemoryRouter>,
+  );
+}
+
 describe('SignupPage', () => {
   beforeEach(() => {
     mockSignUp.mockReset();
     mockNavigate.mockReset();
   });
 
-  it('signs up and navigates to the dashboard on success', async () => {
-    mockSignUp.mockResolvedValue({ data: { user: {}, session: {} }, error: null });
+  it('shows a "check your email" message when signUp returns no session (email confirmation required)', async () => {
+    mockSignUp.mockResolvedValue({ data: { user: {}, session: null }, error: null });
     const user = userEvent.setup();
 
-    render(
-      <MemoryRouter>
-        <SignupPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     await user.type(screen.getByLabelText('Email'), 'newuser@example.com');
     await user.type(screen.getByLabelText('Password'), 'hunter22');
     await user.click(screen.getByRole('button', { name: 'Sign up' }));
 
     await waitFor(() =>
-      expect(mockSignUp).toHaveBeenCalledWith({ email: 'newuser@example.com', password: 'hunter22' }),
+      expect(mockSignUp).toHaveBeenCalledWith({
+        email: 'newuser@example.com',
+        password: 'hunter22',
+        options: { emailRedirectTo: `${window.location.origin}/login` },
+      }),
     );
-    expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+    expect(await screen.findByText(/check your email to confirm your account/i)).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('navigates to the dashboard if signUp returns an active session', async () => {
+    mockSignUp.mockResolvedValue({ data: { user: {}, session: {} }, error: null });
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await user.type(screen.getByLabelText('Email'), 'newuser@example.com');
+    await user.type(screen.getByLabelText('Password'), 'hunter22');
+    await user.click(screen.getByRole('button', { name: 'Sign up' }));
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/dashboard'));
   });
 
   it('shows the error message verbatim on a failed signup', async () => {
-    mockSignUp.mockResolvedValue({ data: { user: null, session: null }, error: { message: 'Email already registered' } });
+    mockSignUp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: 'Email already registered' },
+    });
     const user = userEvent.setup();
 
-    render(
-      <MemoryRouter>
-        <SignupPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     await user.type(screen.getByLabelText('Email'), 'dupe@example.com');
     await user.type(screen.getByLabelText('Password'), 'hunter22');
@@ -61,11 +83,7 @@ describe('SignupPage', () => {
   });
 
   it('links to the login page', () => {
-    render(
-      <MemoryRouter>
-        <SignupPage />
-      </MemoryRouter>,
-    );
+    renderPage();
     expect(screen.getByRole('link', { name: /log in/i })).toHaveAttribute('href', '/login');
   });
 });

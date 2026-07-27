@@ -13,18 +13,37 @@ export function SignupPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setIsSubmitting(true);
-    const { error: signUpError } = await supabase.auth.signUp({ email, password });
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: `${window.location.origin}/login` },
+    });
     setIsSubmitting(false);
     if (signUpError) {
       setError(signUpError.message);
       return;
     }
+    if (!data.session) {
+      setConfirmationSent(true);
+      return;
+    }
     navigate('/dashboard');
+  }
+
+  if (confirmationSent) {
+    return (
+      <div className="card-surface mx-auto mt-8 max-w-sm p-8">
+        <Logo size={40} className="mb-6" />
+        <h1 className="mb-6 text-2xl font-extrabold">Sign Up</h1>
+        <p className="text-sm">Check your email to confirm your account before logging in.</p>
+      </div>
+    );
   }
 
   return (
