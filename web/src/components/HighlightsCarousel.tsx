@@ -21,7 +21,7 @@ function SlideContent({ slide }: { slide: HighlightSlide }) {
             <Link to={`/players/${slide.playerId}`} className="text-xl font-extrabold text-white hover:underline">
               {slide.fullName}
             </Link>
-            <p className="text-sm text-white/85">+{slide.ratingGain} rating this week</p>
+            <p className="text-sm text-white/85">+{Math.round(slide.ratingGain)} rating this week</p>
           </div>
         </div>
       );
