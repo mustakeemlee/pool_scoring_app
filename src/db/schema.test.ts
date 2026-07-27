@@ -35,6 +35,7 @@ describe('initial schema', () => {
     expect(tableNames).toEqual(
       [
         'admin_users',
+        'fixtures',
         'match_audit_log',
         'matches',
         'player_claims',

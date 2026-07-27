@@ -24,7 +24,7 @@ afterAll(async () => {
 });
 
 describe('row level security', () => {
-  it('enables RLS on all 11 tables', async () => {
+  it('enables RLS on all 12 tables', async () => {
     const result = await client.query(
       `select relname from pg_class
        join pg_namespace on pg_namespace.oid = pg_class.relnamespace
@@ -36,6 +36,7 @@ describe('row level security', () => {
     expect(tableNames).toEqual(
       [
         'admin_users',
+        'fixtures',
         'match_audit_log',
         'matches',
         'player_claims',
@@ -59,6 +60,7 @@ describe('row level security', () => {
     expect(tableNames).toEqual(
       [
         'admin_users',
+        'fixtures',
         'matches',
         'player_claims',
         'player_season_ratings',
@@ -160,6 +162,7 @@ describe('league data requires login (anon denied, authenticated allowed)', () =
     matches: 'select * from matches limit 1',
     weekly_rankings: 'select * from weekly_rankings limit 1',
     player_statistics: 'select * from player_statistics limit 1',
+    fixtures: 'select * from fixtures limit 1',
   };
 
   for (const [table, query] of Object.entries(selects)) {
