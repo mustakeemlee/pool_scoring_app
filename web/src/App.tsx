@@ -7,6 +7,7 @@ import { AdminLayout } from '@/components/AdminLayout';
 import { LeaderboardPage } from '@/pages/Leaderboard';
 import { PlayerProfilePage } from '@/pages/PlayerProfile';
 import { GradeDistributionPage } from '@/pages/GradeDistribution';
+import { GradeRosterPage } from '@/pages/GradeRoster';
 import { MatchHistoryPage } from '@/pages/MatchHistory';
 import { ExplorePage } from '@/pages/Explore';
 import { NotFoundPage } from '@/pages/NotFound';
@@ -39,6 +40,7 @@ export function App() {
             <Route path="/" element={<LeaderboardPage />} />
             <Route path="/players/:playerId" element={<PlayerProfilePage />} />
             <Route path="/grades" element={<GradeDistributionPage />} />
+            <Route path="/grades/:grade" element={<GradeRosterPage />} />
             <Route path="/matches" element={<MatchHistoryPage />} />
             <Route path="/explore" element={<ExplorePage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
