@@ -19,6 +19,7 @@ interface EnterMatchBody {
   player_b_id: string;
   frames_a: number;
   frames_b: number;
+  fixture_id?: string;
 }
 
 async function ensureRatingRow(sql: TransactionSql, playerId: string, seasonId: string) {
@@ -96,7 +97,7 @@ Deno.serve(async (req: Request) => {
   } catch {
     return jsonResponse({ error: 'Request body must be valid JSON' }, 400);
   }
-  const { season_id, match_date, player_a_id, player_b_id, frames_a, frames_b } = body;
+  const { season_id, match_date, player_a_id, player_b_id, frames_a, frames_b, fixture_id } = body;
 
   if (!isUuid(season_id)) return jsonResponse({ error: 'season_id must be a valid UUID' }, 400);
   if (!isUuid(player_a_id)) return jsonResponse({ error: 'player_a_id must be a valid UUID' }, 400);
@@ -115,6 +116,9 @@ Deno.serve(async (req: Request) => {
   }
   if (frames_a === frames_b) {
     return jsonResponse({ error: 'frames_a and frames_b cannot be equal' }, 400);
+  }
+  if (fixture_id !== undefined && !isUuid(fixture_id)) {
+    return jsonResponse({ error: 'fixture_id must be a valid UUID' }, 400);
   }
 
   try {
@@ -157,6 +161,31 @@ Deno.serve(async (req: Request) => {
         return { matchId: existingMatch.id as string, alreadyExisted: true };
       }
 
+      // Fixture completion is validated here -- after the idempotency check
+      // above, so a network retry of an already-completed fixture's request
+      // hits the idempotency early-return (the fixture was already marked
+      // completed by the first, successful call) rather than this fixture
+      // check. Locked FOR UPDATE to close the same race a concurrent
+      // duplicate completion attempt could otherwise hit; locking it after
+      // the player-row locks above can't deadlock against anything else in
+      // this codebase, since no other code path locks a fixtures row and
+      // player rows together in a different order.
+      if (fixture_id) {
+        const [fixture] = await sql`
+          select id, status, player_a_id, player_b_id from fixtures where id = ${fixture_id} for update
+        `;
+        if (!fixture) throw new HttpError(400, 'fixture_id does not reference an existing fixture');
+        if (fixture.status !== 'scheduled') {
+          throw new HttpError(409, `Fixture is already ${fixture.status}, cannot enter a result for it`);
+        }
+        const samePair =
+          (fixture.player_a_id === player_a_id && fixture.player_b_id === player_b_id) ||
+          (fixture.player_a_id === player_b_id && fixture.player_b_id === player_a_id);
+        if (!samePair) {
+          throw new HttpError(400, 'Submitted players do not match this fixture');
+        }
+      }
+
       const winnerId = frames_a > frames_b ? player_a_id : player_b_id;
 
       const [match] = await sql`
@@ -164,6 +193,10 @@ Deno.serve(async (req: Request) => {
         values (${season_id}, ${match_date}, ${player_a_id}, ${player_b_id}, ${frames_a}, ${frames_b}, ${winnerId}, ${admin.id})
         returning id
       `;
+
+      if (fixture_id) {
+        await sql`update fixtures set status = 'completed', completed_match_id = ${match.id} where id = ${fixture_id}`;
+      }
 
       const nudge = applyInstantNudge({
         ratingA: ratingA.rating,
