@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 const mockMatchMaybeSingle = vi.fn();
-const mockEventsEq = vi.fn();
+const mockEventsMatchIdEq = vi.fn();
+const mockEventsEventTypeEq = vi.fn();
 
 vi.mock('@/lib/supabaseClient', () => ({
   supabase: {
@@ -14,7 +15,14 @@ vi.mock('@/lib/supabaseClient', () => ({
         return { select: () => ({ eq: () => ({ maybeSingle: mockMatchMaybeSingle }) }) };
       }
       if (table === 'rating_events') {
-        return { select: () => ({ eq: () => ({ eq: mockEventsEq }) }) };
+        return {
+          select: () => ({
+            eq: (...args: unknown[]) => {
+              mockEventsMatchIdEq(...args);
+              return { eq: (...args2: unknown[]) => mockEventsEventTypeEq(...args2) };
+            },
+          }),
+        };
       }
       throw new Error(`Unexpected table in test: ${table}`);
     },
@@ -43,12 +51,13 @@ const MATCH_ROW = {
 describe('useMatch', () => {
   beforeEach(() => {
     mockMatchMaybeSingle.mockReset();
-    mockEventsEq.mockReset();
+    mockEventsMatchIdEq.mockReset();
+    mockEventsEventTypeEq.mockReset();
   });
 
   it("combines the match with each player's instant rating delta from that match", async () => {
     mockMatchMaybeSingle.mockResolvedValue({ data: MATCH_ROW, error: null });
-    mockEventsEq.mockResolvedValue({
+    mockEventsEventTypeEq.mockResolvedValue({
       data: [
         { player_id: 'p1', delta: 12.5 },
         { player_id: 'p2', delta: -12.5 },
@@ -60,11 +69,17 @@ describe('useMatch', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual({ ...MATCH_ROW, rating_delta_a: 12.5, rating_delta_b: -12.5 });
+    // Verifies the actual filter logic, not just the delta-matching over
+    // already-shaped mock rows: scoped to this match and to instant nudges
+    // only (never a weekly-reconciliation event, which can't be attributed
+    // to one match).
+    expect(mockEventsMatchIdEq).toHaveBeenCalledWith('match_id', 'm1');
+    expect(mockEventsEventTypeEq).toHaveBeenCalledWith('event_type', 'instant');
   });
 
   it('returns null rating deltas when no instant rating_events exist for this match', async () => {
     mockMatchMaybeSingle.mockResolvedValue({ data: MATCH_ROW, error: null });
-    mockEventsEq.mockResolvedValue({ data: [], error: null });
+    mockEventsEventTypeEq.mockResolvedValue({ data: [], error: null });
 
     const { result } = renderHook(() => useMatch('m1'), { wrapper });
 
@@ -75,7 +90,7 @@ describe('useMatch', () => {
 
   it('returns null when no match matches the given id', async () => {
     mockMatchMaybeSingle.mockResolvedValue({ data: null, error: null });
-    mockEventsEq.mockResolvedValue({ data: [], error: null });
+    mockEventsEventTypeEq.mockResolvedValue({ data: [], error: null });
 
     const { result } = renderHook(() => useMatch('missing'), { wrapper });
 
@@ -91,7 +106,7 @@ describe('useMatch', () => {
 
   it('surfaces a fetch error from the match query', async () => {
     mockMatchMaybeSingle.mockResolvedValue({ data: null, error: new Error('boom') });
-    mockEventsEq.mockResolvedValue({ data: [], error: null });
+    mockEventsEventTypeEq.mockResolvedValue({ data: [], error: null });
 
     const { result } = renderHook(() => useMatch('m1'), { wrapper });
 

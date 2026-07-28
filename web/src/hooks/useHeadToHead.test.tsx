@@ -4,11 +4,19 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
+const mockEq = vi.fn();
 const mockOr = vi.fn();
 
 vi.mock('@/lib/supabaseClient', () => ({
   supabase: {
-    from: () => ({ select: () => ({ eq: () => ({ or: mockOr }) }) }),
+    from: () => ({
+      select: () => ({
+        eq: (...args: unknown[]) => {
+          mockEq(...args);
+          return { or: (...args2: unknown[]) => mockOr(...args2) };
+        },
+      }),
+    }),
   },
 }));
 
@@ -21,6 +29,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe('useHeadToHead', () => {
   beforeEach(() => {
+    mockEq.mockReset();
     mockOr.mockReset();
   });
 
@@ -34,6 +43,13 @@ describe('useHeadToHead', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual({ winsA: 2, winsB: 1, played: 3 });
+    // Verifies the actual filter logic, not just the tally over already-shaped
+    // mock rows: excludes voided matches, and matches the pairing in either
+    // player_a/player_b order.
+    expect(mockEq).toHaveBeenCalledWith('is_voided', false);
+    expect(mockOr).toHaveBeenCalledWith(
+      'and(player_a_id.eq.pA,player_b_id.eq.pB),and(player_a_id.eq.pB,player_b_id.eq.pA)',
+    );
   });
 
   it('returns played: 0 with no wins when the two players have never met', async () => {
