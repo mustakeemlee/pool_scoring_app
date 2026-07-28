@@ -99,6 +99,26 @@ describe('FixtureDetailPage', () => {
     expect(screen.getByText('This fixture was cancelled.')).toBeInTheDocument();
   });
 
+  it('shows a loading skeleton while a dependent hook is still loading, even though the fixture itself has already loaded', () => {
+    mockUseFixture.mockReturnValue({ data: FIXTURE, isLoading: false, isError: false });
+    mockUsePlayerComparisonStats.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    mockUseHeadToHead.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+
+    const { container } = renderPage();
+    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+    expect(screen.queryByText('Alex Testplayer')).not.toBeInTheDocument();
+  });
+
+  it('shows an error message when a dependent hook fails, even though the fixture itself loaded successfully', () => {
+    mockUseFixture.mockReturnValue({ data: FIXTURE, isLoading: false, isError: false });
+    mockUsePlayerComparisonStats.mockImplementation((playerId: string | undefined) => statsFor(playerId));
+    mockUseHeadToHead.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+
+    renderPage();
+    expect(screen.getByText("Couldn't load this fixture. Try refreshing.")).toBeInTheDocument();
+    expect(screen.queryByText('Alex Testplayer')).not.toBeInTheDocument();
+  });
+
   it('redirects to the match detail page instead of rendering when the fixture is already completed', () => {
     mockUseFixture.mockReturnValue({
       data: { ...FIXTURE, status: 'completed', completed_match_id: 'm9' },

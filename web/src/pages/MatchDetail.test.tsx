@@ -94,6 +94,26 @@ describe('MatchDetailPage', () => {
     expect(screen.getByText("This match doesn't exist.")).toBeInTheDocument();
   });
 
+  it('shows a loading skeleton while a dependent hook is still loading, even though the match itself has already loaded', () => {
+    mockUseMatch.mockReturnValue({ data: MATCH, isLoading: false, isError: false });
+    mockUsePlayerComparisonStats.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    mockUseHeadToHead.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+
+    const { container } = renderPage();
+    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+    expect(screen.queryByText('Alex Testplayer')).not.toBeInTheDocument();
+  });
+
+  it('shows an error message when a dependent hook fails, even though the match itself loaded successfully', () => {
+    mockUseMatch.mockReturnValue({ data: MATCH, isLoading: false, isError: false });
+    mockUsePlayerComparisonStats.mockImplementation((playerId: string | undefined) => statsFor(playerId));
+    mockUseHeadToHead.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+
+    renderPage();
+    expect(screen.getByText("Couldn't load this match. Try refreshing.")).toBeInTheDocument();
+    expect(screen.queryByText('Alex Testplayer')).not.toBeInTheDocument();
+  });
+
   it('shows a voided-match warning when the match was voided', () => {
     mockUseMatch.mockReturnValue({ data: { ...MATCH, is_voided: true }, isLoading: false, isError: false });
     mockUsePlayerComparisonStats.mockImplementation((playerId: string | undefined) => statsFor(playerId));
