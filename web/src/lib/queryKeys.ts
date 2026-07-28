@@ -18,4 +18,5 @@ export const queryKeys = {
   gradeRoster: (seasonId: string, grade: string) => ['gradeRoster', seasonId, grade] as const,
   playerOfTheWeek: (seasonId: string) => ['playerOfTheWeek', seasonId] as const,
   fixtures: (seasonId: string) => ['fixtures', seasonId] as const,
+  headToHead: (playerAId: string, playerBId: string) => ['headToHead', playerAId, playerBId] as const,
 };
