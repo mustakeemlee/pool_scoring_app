@@ -52,6 +52,11 @@ describe('MatchTable', () => {
     expect(voidedRow?.className).toContain('opacity-50');
   });
 
+  it("links the score to that match's detail page", () => {
+    render(<MatchTable matches={matches} />, { wrapper: MemoryRouter });
+    expect(screen.getByRole('link', { name: '5–2' })).toHaveAttribute('href', '/matches/m1');
+  });
+
   it('renders an empty state when there are no matches', () => {
     render(<MatchTable matches={[]} />, { wrapper: MemoryRouter });
     expect(screen.getByText('No matches yet.')).toBeInTheDocument();

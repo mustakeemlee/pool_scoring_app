@@ -53,7 +53,9 @@ export function MatchTable({ matches }: { matches: MatchRow[] }) {
                 <PlayerCell player={match.player_b} won={match.winner_id === match.player_b_id} />
               </td>
               <td className="px-4 py-3 font-bold tabular-nums">
-                {match.frames_a}–{match.frames_b}
+                <Link to={`/matches/${match.id}`} className="hover:text-primary hover:underline">
+                  {match.frames_a}–{match.frames_b}
+                </Link>
                 {match.is_voided && <span className="ml-2 text-xs font-normal italic">(voided)</span>}
               </td>
             </tr>

@@ -51,14 +51,23 @@ function FixturesList({ seasonId, isAdmin }: { seasonId: string; isAdmin: boolea
           key={fixture.id}
           className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 last:border-0"
         >
-          <span className="text-muted-foreground w-24 text-sm">{fixture.scheduled_date}</span>
-          <div className="flex flex-1 items-center gap-2">
-            <PlayerAvatar name={fixture.player_a.full_name} photoUrl={fixture.player_a.photo_url} size="sm" />
-            <span className="font-semibold">{fixture.player_a.full_name}</span>
-            <span className="text-muted-foreground text-xs">vs</span>
-            <PlayerAvatar name={fixture.player_b.full_name} photoUrl={fixture.player_b.photo_url} size="sm" />
-            <span className="font-semibold">{fixture.player_b.full_name}</span>
-          </div>
+          <Link
+            to={
+              fixture.status === 'completed' && fixture.completed_match_id
+                ? `/matches/${fixture.completed_match_id}`
+                : `/fixtures/${fixture.id}`
+            }
+            className="flex flex-1 flex-wrap items-center gap-3 hover:text-primary"
+          >
+            <span className="text-muted-foreground w-24 text-sm">{fixture.scheduled_date}</span>
+            <div className="flex flex-1 items-center gap-2">
+              <PlayerAvatar name={fixture.player_a.full_name} photoUrl={fixture.player_a.photo_url} size="sm" />
+              <span className="font-semibold">{fixture.player_a.full_name}</span>
+              <span className="text-muted-foreground text-xs">vs</span>
+              <PlayerAvatar name={fixture.player_b.full_name} photoUrl={fixture.player_b.photo_url} size="sm" />
+              <span className="font-semibold">{fixture.player_b.full_name}</span>
+            </div>
+          </Link>
           {fixture.status === 'voided' && (
             <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">Voided</span>
           )}

@@ -197,4 +197,46 @@ describe('MatchHistoryPage', () => {
     await user.click(screen.getByRole('button', { name: 'Fixtures' }));
     expect(screen.getByText('No fixtures scheduled yet.')).toBeInTheDocument();
   });
+
+  it('links a scheduled fixture row to its fixture detail page', async () => {
+    mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(SEASON, [SEASON]));
+    mockUseFixtures.mockReturnValue({
+      data: [
+        {
+          id: 'f1', season_id: 's1', scheduled_date: '2099-01-01', status: 'scheduled', completed_match_id: null,
+          player_a: { id: 'p3', full_name: 'Sam Newcomer', photo_url: null },
+          player_b: { id: 'p4', full_name: 'Riley Scheduled', photo_url: null },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: 'Fixtures' }));
+
+    expect(screen.getByRole('link', { name: /Sam Newcomer/ })).toHaveAttribute('href', '/fixtures/f1');
+  });
+
+  it('links a completed fixture row to its resulting match, not the fixture page', async () => {
+    mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(SEASON, [SEASON]));
+    mockUseFixtures.mockReturnValue({
+      data: [
+        {
+          id: 'f1', season_id: 's1', scheduled_date: '2026-01-01', status: 'completed', completed_match_id: 'm9',
+          player_a: { id: 'p3', full_name: 'Sam Newcomer', photo_url: null },
+          player_b: { id: 'p4', full_name: 'Riley Scheduled', photo_url: null },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: 'Fixtures' }));
+
+    expect(screen.getByRole('link', { name: /Sam Newcomer/ })).toHaveAttribute('href', '/matches/m9');
+  });
 });
