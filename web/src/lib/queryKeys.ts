@@ -20,4 +20,5 @@ export const queryKeys = {
   fixtures: (seasonId: string) => ['fixtures', seasonId] as const,
   headToHead: (playerAId: string, playerBId: string) => ['headToHead', playerAId, playerBId] as const,
   playerComparisonStats: (playerId: string, seasonId: string) => ['playerComparisonStats', playerId, seasonId] as const,
+  fixtureDetail: (fixtureId: string) => ['fixtureDetail', fixtureId] as const,
 };
