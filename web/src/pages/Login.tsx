@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/Logo';
 import { supabase } from '@/lib/supabaseClient';
 import { consumeIdleSignoutReason } from '@/lib/idleSession';
+import { useAuth } from '@/hooks/useAuth';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { session, isLoading: isAuthLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +35,13 @@ export function LoginPage() {
       return;
     }
     navigate('/dashboard');
+  }
+
+  // An already-authenticated visitor landing here (e.g. via an email
+  // confirmation link that redirects to /login) shouldn't be asked to log
+  // in again.
+  if (!isAuthLoading && session) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return (
