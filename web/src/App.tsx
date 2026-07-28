@@ -9,6 +9,7 @@ import { PlayerProfilePage } from '@/pages/PlayerProfile';
 import { GradeDistributionPage } from '@/pages/GradeDistribution';
 import { GradeRosterPage } from '@/pages/GradeRoster';
 import { MatchHistoryPage } from '@/pages/MatchHistory';
+import { FixtureDetailPage } from '@/pages/FixtureDetail';
 import { ExplorePage } from '@/pages/Explore';
 import { NotFoundPage } from '@/pages/NotFound';
 import { DashboardPage } from '@/pages/Dashboard';
@@ -43,6 +44,7 @@ export function App() {
             <Route path="/grades" element={<GradeDistributionPage />} />
             <Route path="/grades/:grade" element={<GradeRosterPage />} />
             <Route path="/matches" element={<MatchHistoryPage />} />
+            <Route path="/fixtures/:id" element={<FixtureDetailPage />} />
             <Route path="/explore" element={<ExplorePage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/settings" element={<SettingsPage />} />
