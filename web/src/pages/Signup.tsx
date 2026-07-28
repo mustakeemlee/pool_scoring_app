@@ -41,7 +41,12 @@ export function SignupPage() {
       <div className="card-surface mx-auto mt-8 max-w-sm p-8">
         <Logo size={40} className="mb-6" />
         <h1 className="mb-6 text-2xl font-extrabold">Sign Up</h1>
-        <p className="text-sm">Check your email to confirm your account before logging in.</p>
+        <p className="text-sm">
+          We sent a confirmation link to {email}. Check your email to confirm your account before logging in.
+        </p>
+        <Link to="/login" className="text-muted-foreground mt-4 inline-block text-sm hover:underline">
+          Back to log in
+        </Link>
       </div>
     );
   }

@@ -49,6 +49,10 @@ describe('SignupPage', () => {
       }),
     );
     expect(await screen.findByText(/check your email to confirm your account/i)).toBeInTheDocument();
+    // Echoes the address it was sent to, and offers a way back to /login,
+    // rather than leaving the admin at a dead end.
+    expect(screen.getByText(/newuser@example\.com/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to log in' })).toHaveAttribute('href', '/login');
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
