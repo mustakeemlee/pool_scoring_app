@@ -198,10 +198,24 @@ describe('enter-match fixture completion', () => {
     const playerB = await createPlayer('Double Completion Player B');
     const seasonId = await createSeason('Double Completion Season');
 
-    const fixture = await dbClient.query(
-      `insert into fixtures (season_id, scheduled_date, player_a_id, player_b_id, status)
-       values ($1, '2026-03-02', $2, $3, 'completed') returning id`,
+    // A real prior match is required here: the fixtures_completed_has_match
+    // CHECK constraint (see supabase/migrations/20260728000000_fixtures_constraints.sql)
+    // rejects a 'completed' fixture with no completed_match_id, matching the
+    // real invariant enter-match itself always maintains. Its match_date is
+    // deliberately a day earlier than what this test resubmits below, so
+    // enter-match's own idempotency lookup (season/date/players/frames)
+    // doesn't find it and treat this as a harmless retry of an
+    // already-completed submission -- this test is specifically about
+    // rejecting a genuinely new result for an already-completed fixture.
+    const priorMatch = await dbClient.query(
+      `insert into matches (season_id, match_date, player_a_id, player_b_id, frames_a, frames_b, winner_id)
+       values ($1, '2026-03-01', $2, $3, 5, 2, $2) returning id`,
       [seasonId, playerA, playerB],
+    );
+    const fixture = await dbClient.query(
+      `insert into fixtures (season_id, scheduled_date, player_a_id, player_b_id, status, completed_match_id)
+       values ($1, '2026-03-02', $2, $3, 'completed', $4) returning id`,
+      [seasonId, playerA, playerB, priorMatch.rows[0].id],
     );
     const fixtureId = fixture.rows[0].id;
 
@@ -221,12 +235,16 @@ describe('enter-match fixture completion', () => {
       });
       expect(response.status).toBe(409);
 
+      // Still just the one prior match -- the rejected request created no
+      // additional (duplicate) match row.
       const matchCount = await dbClient.query(
         `select count(*)::int as count from matches where player_a_id = $1 and player_b_id = $2`,
         [playerA, playerB],
       );
-      expect(matchCount.rows[0].count).toBe(0);
+      expect(matchCount.rows[0].count).toBe(1);
     } finally {
+      await dbClient.query(`delete from fixtures where id = $1`, [fixtureId]);
+      await cleanupSeasonData(dbClient, seasonId);
       await cleanupTestAdmin(status, admin.userId);
     }
   });
