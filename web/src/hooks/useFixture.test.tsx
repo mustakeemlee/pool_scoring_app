@@ -24,6 +24,7 @@ const ROW = {
   season_id: 's1',
   scheduled_date: '2026-08-01',
   status: 'scheduled',
+  completed_match_id: null,
   player_a: { id: 'p1', full_name: 'Alex Testplayer', photo_url: null },
   player_b: { id: 'p2', full_name: 'Jordan Testplayer', photo_url: null },
 };

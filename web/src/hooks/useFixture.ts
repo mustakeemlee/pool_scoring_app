@@ -10,6 +10,7 @@ export interface FixtureDetail {
   season_id: string;
   scheduled_date: string;
   status: FixtureStatus;
+  completed_match_id: string | null;
   player_a: { id: string; full_name: string; photo_url: string | null };
   player_b: { id: string; full_name: string; photo_url: string | null };
 }
@@ -21,7 +22,7 @@ export function useFixture(fixtureId: string | undefined) {
       const { data, error } = await supabase
         .from('fixtures')
         .select(
-          'id, season_id, scheduled_date, status, player_a:player_a_id(id, full_name, photo_url), player_b:player_b_id(id, full_name, photo_url)',
+          'id, season_id, scheduled_date, status, completed_match_id, player_a:player_a_id(id, full_name, photo_url), player_b:player_b_id(id, full_name, photo_url)',
         )
         .eq('id', fixtureId as string)
         .maybeSingle();

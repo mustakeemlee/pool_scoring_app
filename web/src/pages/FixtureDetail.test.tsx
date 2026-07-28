@@ -24,6 +24,7 @@ const FIXTURE = {
   season_id: 's1',
   scheduled_date: '2026-08-01',
   status: 'scheduled' as const,
+  completed_match_id: null,
   player_a: { id: 'p1', full_name: 'Alex Testplayer', photo_url: null },
   player_b: { id: 'p2', full_name: 'Jordan Testplayer', photo_url: null },
 };
@@ -43,6 +44,7 @@ function renderPage() {
       <MemoryRouter initialEntries={['/fixtures/f1']}>
         <Routes>
           <Route path="/fixtures/:id" element={<FixtureDetailPage />} />
+          <Route path="/matches/:id" element={<p>Match detail placeholder</p>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -95,5 +97,19 @@ describe('FixtureDetailPage', () => {
 
     renderPage();
     expect(screen.getByText('This fixture was cancelled.')).toBeInTheDocument();
+  });
+
+  it('redirects to the match detail page instead of rendering when the fixture is already completed', () => {
+    mockUseFixture.mockReturnValue({
+      data: { ...FIXTURE, status: 'completed', completed_match_id: 'm9' },
+      isLoading: false,
+      isError: false,
+    });
+    mockUsePlayerComparisonStats.mockImplementation((playerId: string | undefined) => statsFor(playerId));
+    mockUseHeadToHead.mockReturnValue({ data: { winsA: 3, winsB: 1, played: 4 }, isLoading: false, isError: false });
+
+    renderPage();
+    expect(screen.getByText('Match detail placeholder')).toBeInTheDocument();
+    expect(screen.queryByText('Alex Testplayer')).not.toBeInTheDocument();
   });
 });
