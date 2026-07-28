@@ -19,4 +19,5 @@ export const queryKeys = {
   playerOfTheWeek: (seasonId: string) => ['playerOfTheWeek', seasonId] as const,
   fixtures: (seasonId: string) => ['fixtures', seasonId] as const,
   headToHead: (playerAId: string, playerBId: string) => ['headToHead', playerAId, playerBId] as const,
+  playerComparisonStats: (playerId: string, seasonId: string) => ['playerComparisonStats', playerId, seasonId] as const,
 };
