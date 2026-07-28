@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
 
@@ -168,5 +168,55 @@ describe('EnterMatchPage', () => {
     // plus a seventh, the fixtures list for this season.
     expect(invalidateSpy).toHaveBeenCalledTimes(7);
     expect(invalidateSpy).toHaveBeenNthCalledWith(7, { queryKey: queryKeys.fixtures('s1') });
+  });
+
+  it('re-prefills when the ?fixtureId= route param changes without the page remounting', async () => {
+    mockUseFixtures.mockReturnValue({
+      data: [
+        {
+          id: 'f1', season_id: 's1', scheduled_date: '2026-08-01', status: 'scheduled', completed_match_id: null,
+          player_a: { id: 'p1', full_name: 'Alex Testplayer', photo_url: null },
+          player_b: { id: 'p2', full_name: 'Jordan Testplayer', photo_url: null },
+        },
+        {
+          id: 'f2', season_id: 's1', scheduled_date: '2026-08-02', status: 'scheduled', completed_match_id: null,
+          player_a: { id: 'p2', full_name: 'Jordan Testplayer', photo_url: null },
+          player_b: { id: 'p1', full_name: 'Alex Testplayer', photo_url: null },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    function Harness() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button type="button" onClick={() => navigate('/admin/enter-match?fixtureId=f2')}>
+            Go to f2
+          </button>
+          <EnterMatchPage />
+        </>
+      );
+    }
+
+    const queryClient = new QueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/admin/enter-match?fixtureId=f1']}>
+          <Harness />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText('Player A')).toHaveValue('p1'));
+    expect(screen.getByLabelText('Match date')).toHaveValue('2026-08-01');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Go to f2' }));
+
+    await waitFor(() => expect(screen.getByLabelText('Player A')).toHaveValue('p2'));
+    expect(screen.getByLabelText('Player B')).toHaveValue('p1');
+    expect(screen.getByLabelText('Match date')).toHaveValue('2026-08-02');
   });
 });

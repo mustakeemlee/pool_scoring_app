@@ -31,19 +31,22 @@ export function EnterMatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Pre-fill exactly once when the named fixture becomes available -- guarded
-  // so a later background refetch of the fixtures list (e.g. on window focus)
-  // can't silently reset an admin's in-progress edits back to the fixture's
-  // original values.
-  const hasPrefilledRef = useRef(false);
+  // Pre-fill exactly once per fixtureId -- guarded so a later background
+  // refetch of the fixtures list (e.g. on window focus) can't silently reset
+  // an admin's in-progress edits back to the fixture's original values.
+  // Keyed on fixtureId itself (not just "have we ever prefilled"), so that if
+  // this page ever stayed mounted across a ?fixtureId= change instead of
+  // remounting, it would still re-prefill for the new fixture rather than
+  // keeping the previous one's stale values.
+  const prefilledFixtureIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (fixture && !hasPrefilledRef.current) {
-      hasPrefilledRef.current = true;
+    if (fixture && prefilledFixtureIdRef.current !== fixtureId) {
+      prefilledFixtureIdRef.current = fixtureId;
       setMatchDate(fixture.scheduled_date);
       setPlayerAId(fixture.player_a.id);
       setPlayerBId(fixture.player_b.id);
     }
-  }, [fixture]);
+  }, [fixture, fixtureId]);
 
   const playerA = players.data?.find((p) => p.id === playerAId);
   const playerB = players.data?.find((p) => p.id === playerBId);
