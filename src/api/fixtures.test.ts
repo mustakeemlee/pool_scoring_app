@@ -415,6 +415,62 @@ describe('enter-match fixture completion', () => {
       await cleanupTestAdmin(status, admin.userId);
     }
   });
+
+  it('rejects a voided fixture even when an unrelated match already matches its date/players/score', async () => {
+    const admin = await provisionTestAdmin(status);
+    const playerA = await createPlayer('Voided Collision Player A');
+    const playerB = await createPlayer('Voided Collision Player B');
+    const seasonId = await createSeason('Voided Collision Season');
+
+    const fixture = await dbClient.query(
+      `insert into fixtures (season_id, scheduled_date, player_a_id, player_b_id, status)
+       values ($1, '2026-03-07', $2, $3, 'voided') returning id`,
+      [seasonId, playerA, playerB],
+    );
+    const fixtureId = fixture.rows[0].id;
+
+    try {
+      // An unrelated match with the exact same (season, date, players, score)
+      // shape as what's resubmitted below -- entered without ever touching
+      // this (already-voided) fixture.
+      await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${admin.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          season_id: seasonId,
+          match_date: '2026-03-07',
+          player_a_id: playerA,
+          player_b_id: playerB,
+          frames_a: 5,
+          frames_b: 2,
+        }),
+      });
+
+      const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${admin.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          season_id: seasonId,
+          match_date: '2026-03-07',
+          player_a_id: playerA,
+          player_b_id: playerB,
+          frames_a: 5,
+          frames_b: 2,
+          fixture_id: fixtureId,
+        }),
+      });
+      expect(response.status).toBe(409);
+
+      const updatedFixture = await dbClient.query(`select status, completed_match_id from fixtures where id = $1`, [
+        fixtureId,
+      ]);
+      expect(updatedFixture.rows[0].status).toBe('voided');
+      expect(updatedFixture.rows[0].completed_match_id).toBeNull();
+    } finally {
+      await cleanupSeasonData(dbClient, seasonId);
+      await cleanupTestAdmin(status, admin.userId);
+    }
+  });
 });
 
 describe('correct-match fixture completion', () => {

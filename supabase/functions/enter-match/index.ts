@@ -66,14 +66,15 @@ async function loadAndValidateFixture(
   seasonId: string,
   playerAId: string,
   playerBId: string,
-): Promise<{ id: string; status: string }> {
+): Promise<{ id: string; status: string; completedMatchId: string | null }> {
   // FOR UPDATE closes the race a concurrent duplicate completion attempt
   // could otherwise hit; locking it after the player-row locks (both call
   // sites below run after those locks are already held) can't deadlock
   // against anything else in this codebase, since no other code path locks
   // a fixtures row and player rows together in a different order.
   const [fixture] = await sql`
-    select id, status, season_id, player_a_id, player_b_id from fixtures where id = ${fixtureId} for update
+    select id, status, season_id, player_a_id, player_b_id, completed_match_id
+    from fixtures where id = ${fixtureId} for update
   `;
   if (!fixture) throw new HttpError(400, 'fixture_id does not reference an existing fixture');
   if (fixture.season_id !== seasonId) {
@@ -85,7 +86,11 @@ async function loadAndValidateFixture(
   if (!samePair) {
     throw new HttpError(400, 'Submitted players do not match this fixture');
   }
-  return { id: fixture.id as string, status: fixture.status as string };
+  return {
+    id: fixture.id as string,
+    status: fixture.status as string,
+    completedMatchId: fixture.completed_match_id as string | null,
+  };
 }
 
 async function updatePlayerAfterMatch(sql: TransactionSql, args: UpdatePlayerArgs): Promise<void> {
@@ -192,16 +197,22 @@ Deno.serve(async (req: Request) => {
         // players, score) coincidentally collides with an unrelated match
         // (e.g. the same pairing entered twice, or by another means, on the
         // same day with the same score) would silently never get marked
-        // completed. A fixture that's already completed/voided here is
-        // either a genuine retry (already correctly linked by the first,
-        // successful call) or a state a real conflict already reported --
-        // either way, no further action is needed.
+        // completed. A fixture already completed with completed_match_id
+        // pointing at this exact existing match is a genuine retry (already
+        // correctly linked by the first, successful call) -- no further
+        // action needed. Any other non-scheduled state (already completed
+        // against a *different* match, or voided) is a real conflict and
+        // must still 409, exactly like the no-collision path below --
+        // finding this existing match by coincidence doesn't make entering
+        // a result for an unrelated already-completed/voided fixture valid.
         if (fixture_id) {
           const fixture = await loadAndValidateFixture(sql, fixture_id, season_id, player_a_id, player_b_id);
           if (fixture.status === 'scheduled') {
             await sql`
               update fixtures set status = 'completed', completed_match_id = ${existingMatch.id} where id = ${fixture_id}
             `;
+          } else if (!(fixture.status === 'completed' && fixture.completedMatchId === existingMatch.id)) {
+            throw new HttpError(409, `Fixture is already ${fixture.status}, cannot enter a result for it`);
           }
         }
         return { matchId: existingMatch.id as string, alreadyExisted: true };
