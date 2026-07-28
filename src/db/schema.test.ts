@@ -162,4 +162,37 @@ describe('initial schema', () => {
     );
     expect(updated.rows[0].is_period_closed).toBe(true);
   });
+
+  it('rejects a fixture where a player plays against themselves', async () => {
+    const season = await client.query(
+      `insert into seasons (name, start_date) values ('Test Season 7', '2026-01-01') returning id`,
+    );
+    const player = await client.query(`insert into players (full_name) values ('Solo Fixture Player') returning id`);
+    const seasonId = season.rows[0].id;
+    const playerId = player.rows[0].id;
+
+    await expect(
+      client.query(
+        `insert into fixtures (season_id, scheduled_date, player_a_id, player_b_id)
+         values ($1, '2026-02-01', $2, $2)`,
+        [seasonId, playerId],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('rejects a fixture marked completed with no completed_match_id', async () => {
+    const season = await client.query(
+      `insert into seasons (name, start_date) values ('Test Season 8', '2026-01-01') returning id`,
+    );
+    const playerA = await client.query(`insert into players (full_name) values ('Completed Fixture Player A') returning id`);
+    const playerB = await client.query(`insert into players (full_name) values ('Completed Fixture Player B') returning id`);
+
+    await expect(
+      client.query(
+        `insert into fixtures (season_id, scheduled_date, player_a_id, player_b_id, status)
+         values ($1, '2026-02-01', $2, $3, 'completed')`,
+        [season.rows[0].id, playerA.rows[0].id, playerB.rows[0].id],
+      ),
+    ).rejects.toThrow();
+  });
 });
