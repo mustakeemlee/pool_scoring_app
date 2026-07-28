@@ -81,13 +81,13 @@ describe('FixtureDetailPage', () => {
     expect(screen.getByText("Couldn't load this fixture. Try refreshing.")).toBeInTheDocument();
   });
 
-  it('shows an error message when no fixture matches the id', () => {
+  it('shows a distinct not-found message when no fixture matches the id', () => {
     mockUseFixture.mockReturnValue({ data: null, isLoading: false, isError: false });
     mockUsePlayerComparisonStats.mockReturnValue({ data: undefined, isLoading: false, isError: false });
     mockUseHeadToHead.mockReturnValue({ data: undefined, isLoading: false, isError: false });
 
     renderPage();
-    expect(screen.getByText("Couldn't load this fixture. Try refreshing.")).toBeInTheDocument();
+    expect(screen.getByText("This fixture doesn't exist.")).toBeInTheDocument();
   });
 
   it('shows a voided message when the fixture was cancelled', () => {

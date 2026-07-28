@@ -17,8 +17,12 @@ export function FixtureDetailPage() {
     return <Skeleton className="h-64 w-full rounded-xl" />;
   }
 
-  if (fixture.isError || !fixture.data) {
+  if (fixture.isError) {
     return <p className="text-destructive">Couldn't load this fixture. Try refreshing.</p>;
+  }
+
+  if (!fixture.data) {
+    return <p className="text-muted-foreground">This fixture doesn't exist.</p>;
   }
 
   // A fixture's own page never has a score to show -- once it's completed,

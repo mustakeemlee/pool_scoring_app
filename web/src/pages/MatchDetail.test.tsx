@@ -85,13 +85,13 @@ describe('MatchDetailPage', () => {
     expect(screen.getByText("Couldn't load this match. Try refreshing.")).toBeInTheDocument();
   });
 
-  it('shows an error message when no match matches the id', () => {
+  it('shows a distinct not-found message when no match matches the id', () => {
     mockUseMatch.mockReturnValue({ data: null, isLoading: false, isError: false });
     mockUsePlayerComparisonStats.mockReturnValue({ data: undefined, isLoading: false, isError: false });
     mockUseHeadToHead.mockReturnValue({ data: undefined, isLoading: false, isError: false });
 
     renderPage();
-    expect(screen.getByText("Couldn't load this match. Try refreshing.")).toBeInTheDocument();
+    expect(screen.getByText("This match doesn't exist.")).toBeInTheDocument();
   });
 
   it('shows a voided-match warning when the match was voided', () => {

@@ -17,8 +17,12 @@ export function MatchDetailPage() {
     return <Skeleton className="h-64 w-full rounded-xl" />;
   }
 
-  if (match.isError || !match.data) {
+  if (match.isError) {
     return <p className="text-destructive">Couldn't load this match. Try refreshing.</p>;
+  }
+
+  if (!match.data) {
+    return <p className="text-muted-foreground">This match doesn't exist.</p>;
   }
 
   if (playerAStats.isLoading || playerBStats.isLoading || headToHead.isLoading) {
