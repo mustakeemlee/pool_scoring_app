@@ -60,6 +60,34 @@ interface UpdatePlayerArgs {
   opponentRating: number;
 }
 
+async function loadAndValidateFixture(
+  sql: TransactionSql,
+  fixtureId: string,
+  seasonId: string,
+  playerAId: string,
+  playerBId: string,
+): Promise<{ id: string; status: string }> {
+  // FOR UPDATE closes the race a concurrent duplicate completion attempt
+  // could otherwise hit; locking it after the player-row locks (both call
+  // sites below run after those locks are already held) can't deadlock
+  // against anything else in this codebase, since no other code path locks
+  // a fixtures row and player rows together in a different order.
+  const [fixture] = await sql`
+    select id, status, season_id, player_a_id, player_b_id from fixtures where id = ${fixtureId} for update
+  `;
+  if (!fixture) throw new HttpError(400, 'fixture_id does not reference an existing fixture');
+  if (fixture.season_id !== seasonId) {
+    throw new HttpError(400, 'fixture_id does not belong to the submitted season_id');
+  }
+  const samePair =
+    (fixture.player_a_id === playerAId && fixture.player_b_id === playerBId) ||
+    (fixture.player_a_id === playerBId && fixture.player_b_id === playerAId);
+  if (!samePair) {
+    throw new HttpError(400, 'Submitted players do not match this fixture');
+  }
+  return { id: fixture.id as string, status: fixture.status as string };
+}
+
 async function updatePlayerAfterMatch(sql: TransactionSql, args: UpdatePlayerArgs): Promise<void> {
   const matchesPlayed = args.priorMatchesPlayed + 1;
   const seasonPointsEarned = calculateSeasonPoints({
@@ -158,31 +186,31 @@ Deno.serve(async (req: Request) => {
           and frames_a = ${frames_a} and frames_b = ${frames_b} and is_voided = false
       `;
       if (existingMatch) {
+        // A byte-identical match already exists. If this request also names
+        // a still-scheduled fixture, complete it now against that existing
+        // match before returning -- otherwise a fixture whose (date,
+        // players, score) coincidentally collides with an unrelated match
+        // (e.g. the same pairing entered twice, or by another means, on the
+        // same day with the same score) would silently never get marked
+        // completed. A fixture that's already completed/voided here is
+        // either a genuine retry (already correctly linked by the first,
+        // successful call) or a state a real conflict already reported --
+        // either way, no further action is needed.
+        if (fixture_id) {
+          const fixture = await loadAndValidateFixture(sql, fixture_id, season_id, player_a_id, player_b_id);
+          if (fixture.status === 'scheduled') {
+            await sql`
+              update fixtures set status = 'completed', completed_match_id = ${existingMatch.id} where id = ${fixture_id}
+            `;
+          }
+        }
         return { matchId: existingMatch.id as string, alreadyExisted: true };
       }
 
-      // Fixture completion is validated here -- after the idempotency check
-      // above, so a network retry of an already-completed fixture's request
-      // hits the idempotency early-return (the fixture was already marked
-      // completed by the first, successful call) rather than this fixture
-      // check. Locked FOR UPDATE to close the same race a concurrent
-      // duplicate completion attempt could otherwise hit; locking it after
-      // the player-row locks above can't deadlock against anything else in
-      // this codebase, since no other code path locks a fixtures row and
-      // player rows together in a different order.
       if (fixture_id) {
-        const [fixture] = await sql`
-          select id, status, player_a_id, player_b_id from fixtures where id = ${fixture_id} for update
-        `;
-        if (!fixture) throw new HttpError(400, 'fixture_id does not reference an existing fixture');
+        const fixture = await loadAndValidateFixture(sql, fixture_id, season_id, player_a_id, player_b_id);
         if (fixture.status !== 'scheduled') {
           throw new HttpError(409, `Fixture is already ${fixture.status}, cannot enter a result for it`);
-        }
-        const samePair =
-          (fixture.player_a_id === player_a_id && fixture.player_b_id === player_b_id) ||
-          (fixture.player_a_id === player_b_id && fixture.player_b_id === player_a_id);
-        if (!samePair) {
-          throw new HttpError(400, 'Submitted players do not match this fixture');
         }
       }
 

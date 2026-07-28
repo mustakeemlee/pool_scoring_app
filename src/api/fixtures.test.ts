@@ -264,4 +264,190 @@ describe('enter-match fixture completion', () => {
       await cleanupTestAdmin(status, admin.userId);
     }
   });
+
+  it('rejects a fixture_id whose season does not match the submitted season_id', async () => {
+    const admin = await provisionTestAdmin(status);
+    const playerA = await createPlayer('Season Mismatch Player A');
+    const playerB = await createPlayer('Season Mismatch Player B');
+    const fixtureSeasonId = await createSeason('Season Mismatch Fixture Season');
+    const submittedSeasonId = await createSeason('Season Mismatch Submitted Season');
+
+    const fixture = await dbClient.query(
+      `insert into fixtures (season_id, scheduled_date, player_a_id, player_b_id)
+       values ($1, '2026-03-04', $2, $3) returning id`,
+      [fixtureSeasonId, playerA, playerB],
+    );
+    const fixtureId = fixture.rows[0].id;
+
+    try {
+      const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${admin.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          season_id: submittedSeasonId,
+          match_date: '2026-03-04',
+          player_a_id: playerA,
+          player_b_id: playerB,
+          frames_a: 5,
+          frames_b: 2,
+          fixture_id: fixtureId,
+        }),
+      });
+      expect(response.status).toBe(400);
+    } finally {
+      await cleanupTestAdmin(status, admin.userId);
+    }
+  });
+
+  it('rejects completing an already-voided fixture', async () => {
+    const admin = await provisionTestAdmin(status);
+    const playerA = await createPlayer('Voided Completion Player A');
+    const playerB = await createPlayer('Voided Completion Player B');
+    const seasonId = await createSeason('Voided Completion Season');
+
+    const fixture = await dbClient.query(
+      `insert into fixtures (season_id, scheduled_date, player_a_id, player_b_id, status)
+       values ($1, '2026-03-05', $2, $3, 'voided') returning id`,
+      [seasonId, playerA, playerB],
+    );
+    const fixtureId = fixture.rows[0].id;
+
+    try {
+      const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${admin.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          season_id: seasonId,
+          match_date: '2026-03-05',
+          player_a_id: playerA,
+          player_b_id: playerB,
+          frames_a: 5,
+          frames_b: 2,
+          fixture_id: fixtureId,
+        }),
+      });
+      expect(response.status).toBe(409);
+    } finally {
+      await cleanupTestAdmin(status, admin.userId);
+    }
+  });
+
+  it('still completes a scheduled fixture when an unrelated match already matches its date/players/score', async () => {
+    const admin = await provisionTestAdmin(status);
+    const playerA = await createPlayer('Collision Player A');
+    const playerB = await createPlayer('Collision Player B');
+    const seasonId = await createSeason('Collision Season');
+
+    const fixture = await dbClient.query(
+      `insert into fixtures (season_id, scheduled_date, player_a_id, player_b_id)
+       values ($1, '2026-03-06', $2, $3) returning id`,
+      [seasonId, playerA, playerB],
+    );
+    const fixtureId = fixture.rows[0].id;
+
+    try {
+      // An unrelated match with the exact same (season, date, players, score)
+      // shape the fixture will be completed with, entered without ever
+      // touching this fixture -- simulating a coincidental collision, not a
+      // retry of this fixture's own completion.
+      const unrelatedResponse = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${admin.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          season_id: seasonId,
+          match_date: '2026-03-06',
+          player_a_id: playerA,
+          player_b_id: playerB,
+          frames_a: 5,
+          frames_b: 2,
+        }),
+      });
+      const unrelatedBody = await unrelatedResponse.json();
+      const unrelatedMatchId = unrelatedBody.match_id as string;
+
+      const response = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${admin.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          season_id: seasonId,
+          match_date: '2026-03-06',
+          player_a_id: playerA,
+          player_b_id: playerB,
+          frames_a: 5,
+          frames_b: 2,
+          fixture_id: fixtureId,
+        }),
+      });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.match_id).toBe(unrelatedMatchId);
+
+      const updatedFixture = await dbClient.query(
+        `select status, completed_match_id from fixtures where id = $1`,
+        [fixtureId],
+      );
+      expect(updatedFixture.rows[0].status).toBe('completed');
+      expect(updatedFixture.rows[0].completed_match_id).toBe(unrelatedMatchId);
+    } finally {
+      // This test creates a real `matches` row (the "unrelated" one), now
+      // referenced by this fixture via completed_match_id -- same FK-safe
+      // cleanup order as the "completes a fixture atomically" test above.
+      await dbClient.query(`delete from fixtures where id = $1`, [fixtureId]);
+      await cleanupSeasonData(dbClient, seasonId);
+      await cleanupTestAdmin(status, admin.userId);
+    }
+  });
+});
+
+describe('correct-match fixture completion', () => {
+  it("re-points a fixture's completed_match_id to the corrected match when its result is corrected", async () => {
+    const admin = await provisionTestAdmin(status);
+    const playerA = await createPlayer('Correction Fixture Player A');
+    const playerB = await createPlayer('Correction Fixture Player B');
+    const seasonId = await createSeason('Correction Fixture Season');
+
+    const fixture = await dbClient.query(
+      `insert into fixtures (season_id, scheduled_date, player_a_id, player_b_id)
+       values ($1, '2026-04-01', $2, $3) returning id`,
+      [seasonId, playerA, playerB],
+    );
+    const fixtureId = fixture.rows[0].id;
+
+    try {
+      const enterResponse = await fetch(`${status.API_URL}/functions/v1/enter-match`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${admin.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          season_id: seasonId,
+          match_date: '2026-04-01',
+          player_a_id: playerA,
+          player_b_id: playerB,
+          frames_a: 5,
+          frames_b: 2,
+          fixture_id: fixtureId,
+        }),
+      });
+      const enterBody = await enterResponse.json();
+      const originalMatchId = enterBody.match_id as string;
+
+      const correctResponse = await fetch(`${status.API_URL}/functions/v1/correct-match`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${admin.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ match_id: originalMatchId, frames_a: 5, frames_b: 3 }),
+      });
+      expect(correctResponse.status).toBe(200);
+      const correctBody = await correctResponse.json();
+      const correctedMatchId = correctBody.corrected_match_id as string;
+      expect(correctedMatchId).not.toBe(originalMatchId);
+
+      const updatedFixture = await dbClient.query(`select completed_match_id from fixtures where id = $1`, [
+        fixtureId,
+      ]);
+      expect(updatedFixture.rows[0].completed_match_id).toBe(correctedMatchId);
+    } finally {
+      await dbClient.query(`delete from fixtures where id = $1`, [fixtureId]);
+      await cleanupSeasonData(dbClient, seasonId);
+      await cleanupTestAdmin(status, admin.userId);
+    }
+  });
 });

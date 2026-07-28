@@ -140,6 +140,17 @@ Deno.serve(async (req: Request) => {
 
       await sql`update matches set is_voided = true where id = ${body.match_id}`;
 
+      // If the original match completed a fixture, re-point that fixture at
+      // the corrected match. Otherwise the fixture keeps referencing the now-
+      // voided match, so opening it from the Fixtures tab would show the
+      // stale, pre-correction score. Scoped by completed_match_id, so this is
+      // a no-op when the original match was never fixture-linked.
+      await sql`
+        update fixtures
+        set completed_match_id = ${corrected.id}
+        where completed_match_id = ${body.match_id}
+      `;
+
       await sql`
         insert into match_audit_log (match_id, changed_by, change_type, old_values)
         values (${body.match_id}, ${admin.id}, 'voided', ${sql.json(original as unknown as Record<string, unknown>)})
