@@ -1,6 +1,6 @@
 // web/src/components/HighlightsCarousel.test.tsx
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -89,6 +89,50 @@ describe('HighlightsCarousel', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show slide 2' }));
     expect(screen.getByText('Season Season 2026 is live')).toBeInTheDocument();
+  });
+
+  it('marks the active dot indicator with aria-current for assistive tech', () => {
+    mockUseSeasonInFlight.mockReturnValue(ACTIVE_SEASON);
+    mockUsePlayerOfTheWeek.mockReturnValue({
+      data: { player_id: 'p1', full_name: 'Alex Testplayer', photo_url: null, ratingGain: 42 },
+      isLoading: false,
+      isError: false,
+    });
+    mockUseRecentActivity.mockReturnValue(NO_ACTIVITY);
+
+    renderComponent();
+    expect(screen.getByRole('button', { name: 'Show slide 1' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: 'Show slide 2' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('lets clicking the pause control stop automatic rotation, and clicking again resumes it', () => {
+    vi.useFakeTimers();
+    try {
+      mockUseSeasonInFlight.mockReturnValue(ACTIVE_SEASON);
+      mockUsePlayerOfTheWeek.mockReturnValue({
+        data: { player_id: 'p1', full_name: 'Alex Testplayer', photo_url: null, ratingGain: 42 },
+        isLoading: false,
+        isError: false,
+      });
+      mockUseRecentActivity.mockReturnValue(NO_ACTIVITY);
+
+      renderComponent();
+      expect(screen.getByText('Player of the Week')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pause automatic slide rotation' }));
+      act(() => {
+        vi.advanceTimersByTime(20_000);
+      });
+      expect(screen.getByText('Player of the Week')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Resume automatic slide rotation' }));
+      act(() => {
+        vi.advanceTimersByTime(6_000);
+      });
+      expect(screen.getByText('Season Season 2026 is live')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows a loading skeleton while any composed hook is still loading', () => {
