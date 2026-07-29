@@ -112,6 +112,28 @@ describe('useAuth', () => {
     await waitFor(() => expect(getLastActivity()).toBeGreaterThan(oldTimestamp));
   });
 
+  it('accepts a fresh sign-in even when a stale activity timestamp is still on record', async () => {
+    // Reproduces the post-idle-logout relogin loop: the user was auto signed
+    // out for inactivity (leaving a stale timestamp behind), then re-enters
+    // credentials on /login without ever touching an authenticated page in
+    // between, so nothing has refreshed ACTIVITY_STORAGE_KEY.
+    mockGetSession.mockResolvedValue({ data: { session: null } });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('signed out')).toBeInTheDocument());
+
+    localStorage.setItem(ACTIVITY_STORAGE_KEY, String(Date.now() - IDLE_TIMEOUT_MS - 1_000));
+    const callback = mockOnAuthStateChange.mock.calls[0][0];
+    callback('SIGNED_IN', { user: { email: 'admin@example.com' } });
+
+    await waitFor(() => expect(screen.getByText('signed in as admin@example.com')).toBeInTheDocument());
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
   it('does not reset the activity timestamp on a token-refresh auth event', async () => {
     mockGetSession.mockResolvedValue({ data: { session: null } });
 

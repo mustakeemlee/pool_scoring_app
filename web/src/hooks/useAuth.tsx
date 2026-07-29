@@ -17,13 +17,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function acceptSession(newSession: Session | null, isSignIn: boolean) {
+      // A fresh sign-in is itself activity, so it must mark a new baseline
+      // before the staleness check below runs — otherwise a leftover
+      // pre-idle-logout timestamp immediately signs the new session back
+      // out, looping the login page forever.
+      if (newSession && isSignIn) {
+        markActivityNow();
+        setSession(newSession);
+        return;
+      }
       if (newSession && isActivityStale()) {
         setIdleSignoutReason();
         void supabase.auth.signOut();
         setSession(null);
         return;
       }
-      if (newSession && (isSignIn || getLastActivity() === null)) {
+      if (newSession && getLastActivity() === null) {
         markActivityNow();
       }
       setSession(newSession);
