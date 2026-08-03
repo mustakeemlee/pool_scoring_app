@@ -26,8 +26,8 @@ export function MatchTable({ matches }: { matches: MatchRow[] }) {
   }
 
   return (
-    <div className="card-surface overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="card-surface overflow-hidden overflow-x-auto">
+      <table className="w-full min-w-[32rem] text-sm">
         <thead>
           <tr className="text-muted-foreground border-b border-border text-left text-xs font-semibold uppercase tracking-wider">
             <th className="px-4 py-2.5">Date</th>

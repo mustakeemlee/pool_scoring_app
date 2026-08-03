@@ -18,9 +18,17 @@ export function useGradeRoster(seasonId: string | undefined, grade: Grade | unde
   return useQuery({
     queryKey: queryKeys.gradeRoster(seasonId ?? '', grade ?? ''),
     queryFn: async (): Promise<GradeRosterEntry[]> => {
+      // Queries leaderboard_view (not player_season_ratings directly) so a
+      // player's grade here always agrees with grade_distribution_view's
+      // counts on the Grades page -- both apply the same "0 matches played
+      // this season -> grade 'D'" coalesce over the same players x seasons
+      // cross join. player_season_ratings alone has no row at all for a
+      // player who hasn't played yet this season, so filtering it by grade
+      // directly silently dropped every player the distribution counted
+      // under 'D' for that reason.
       const { data, error } = await supabase
-        .from('player_season_ratings')
-        .select('player_id, rating, season_points, matches_played, player:player_id(full_name, photo_url)')
+        .from('leaderboard_view')
+        .select('player_id, full_name, photo_url, rating, season_points, matches_played')
         .eq('season_id', seasonId as string)
         .eq('grade', grade as string)
         .order('rating', { ascending: false });
@@ -28,17 +36,18 @@ export function useGradeRoster(seasonId: string | undefined, grade: Grade | unde
 
       const rows = data as unknown as {
         player_id: string;
+        full_name: string;
+        photo_url: string | null;
         rating: number;
         season_points: number;
         matches_played: number;
-        player: { full_name: string; photo_url: string | null };
       }[];
 
-      const photoUrlByPath = await resolvePlayerPhotoUrls(rows.map((r) => r.player.photo_url));
+      const photoUrlByPath = await resolvePlayerPhotoUrls(rows.map((r) => r.photo_url));
       return rows.map((row) => ({
         player_id: row.player_id,
-        full_name: row.player.full_name,
-        photo_url: pickResolvedUrl(photoUrlByPath, row.player.photo_url),
+        full_name: row.full_name,
+        photo_url: pickResolvedUrl(photoUrlByPath, row.photo_url),
         rating: row.rating,
         season_points: row.season_points,
         matches_played: row.matches_played,

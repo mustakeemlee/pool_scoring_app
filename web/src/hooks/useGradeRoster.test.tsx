@@ -29,17 +29,19 @@ describe('useGradeRoster', () => {
       data: [
         {
           player_id: 'p1',
+          full_name: 'Alex Testplayer',
+          photo_url: null,
           rating: 1900,
           season_points: 20,
           matches_played: 10,
-          player: { full_name: 'Alex Testplayer', photo_url: null },
         },
         {
           player_id: 'p2',
+          full_name: 'Jordan Testplayer',
+          photo_url: null,
           rating: 1850,
           season_points: 18,
           matches_played: 9,
-          player: { full_name: 'Jordan Testplayer', photo_url: null },
         },
       ],
       error: null,

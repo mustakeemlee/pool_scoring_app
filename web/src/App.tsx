@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TopNav } from '@/components/TopNav';
 import { IdleLogoutDialog } from '@/components/IdleLogoutDialog';
 import { AdminRouteGuard } from '@/components/AdminRouteGuard';
@@ -40,7 +40,8 @@ export function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route element={<AuthRouteGuard />}>
-            <Route path="/" element={<LeaderboardPage />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/leaderboard" element={<LeaderboardPage />} />
             <Route path="/players/:playerId" element={<PlayerProfilePage />} />
             <Route path="/grades" element={<GradeDistributionPage />} />
             <Route path="/grades/:grade" element={<GradeRosterPage />} />

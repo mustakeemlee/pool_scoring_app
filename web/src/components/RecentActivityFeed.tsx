@@ -35,11 +35,11 @@ export function RecentActivityFeed() {
             {recentPlayers.map((player) => (
               <li
                 key={player.id}
-                className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-0"
+                className="flex min-w-0 items-center gap-3 border-b border-border px-4 py-3 last:border-0"
               >
                 <PlayerAvatar name={player.full_name} photoUrl={player.photo_url} size="sm" />
-                <span className="flex-1 font-semibold">{player.full_name}</span>
-                <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">
+                <span className="min-w-0 flex-1 truncate font-semibold">{player.full_name}</span>
+                <span className="text-muted-foreground shrink-0 text-xs font-semibold uppercase tracking-wider">
                   {player.activity === 'signup' ? 'New player' : 'Recent match'}
                 </span>
               </li>

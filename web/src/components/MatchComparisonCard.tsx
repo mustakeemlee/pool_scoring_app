@@ -47,13 +47,24 @@ function signedDelta(delta: number | null): string {
   return `${delta > 0 ? '+' : ''}${delta.toFixed(1)}`;
 }
 
-function StatRow({ label, valueA, valueB }: { label: string; valueA: ReactNode; valueB: ReactNode }) {
+function StatRow({ label, valueA, valueB }: { label: ReactNode; valueA: ReactNode; valueB: ReactNode }) {
   return (
-    <div className="flex items-center justify-between border-b border-border px-4 py-3 last:border-0">
-      <span className="w-28 text-left font-bold tabular-nums">{valueA}</span>
-      <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">{label}</span>
-      <span className="w-28 text-right font-bold tabular-nums">{valueB}</span>
+    <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-3 last:border-0 sm:px-4">
+      <span className="w-16 shrink-0 text-left text-sm font-bold tabular-nums sm:w-28 sm:text-base">{valueA}</span>
+      <span className="text-muted-foreground text-center text-[11px] font-semibold uppercase tracking-wider sm:text-xs">
+        {label}
+      </span>
+      <span className="w-16 shrink-0 text-right text-sm font-bold tabular-nums sm:w-28 sm:text-base">{valueB}</span>
     </div>
+  );
+}
+
+function FormLabel({ short, full }: { short: string; full: string }) {
+  return (
+    <>
+      <span className="sm:hidden">{short}</span>
+      <span className="hidden sm:inline">{full}</span>
+    </>
   );
 }
 
@@ -68,16 +79,32 @@ export function MatchComparisonCard({ date, playerA, playerB, headToHead, result
         </p>
       )}
 
-      <div className="flex items-center justify-between gap-4 px-4 py-5">
-        <Link to={`/players/${playerA.id}`} className="flex flex-col items-center gap-2 text-center hover:text-primary">
-          <PlayerAvatar name={playerA.full_name} photoUrl={playerA.photo_url} size="lg" />
-          <span className="font-bold">{playerA.full_name}</span>
+      <div className="flex items-center justify-between gap-2 px-3 py-5 sm:gap-4 sm:px-4">
+        <Link
+          to={`/players/${playerA.id}`}
+          className="flex min-w-0 flex-1 flex-col items-center gap-2 text-center hover:text-primary"
+        >
+          <PlayerAvatar
+            name={playerA.full_name}
+            photoUrl={playerA.photo_url}
+            size="lg"
+            className="h-12 w-12 sm:h-14 sm:w-14"
+          />
+          <span className="w-full truncate font-bold">{playerA.full_name}</span>
           {playerA.grade && <GradeBadge grade={playerA.grade} />}
         </Link>
-        <span className="text-muted-foreground text-sm font-semibold">{date}</span>
-        <Link to={`/players/${playerB.id}`} className="flex flex-col items-center gap-2 text-center hover:text-primary">
-          <PlayerAvatar name={playerB.full_name} photoUrl={playerB.photo_url} size="lg" />
-          <span className="font-bold">{playerB.full_name}</span>
+        <span className="text-muted-foreground shrink-0 text-xs font-semibold sm:text-sm">{date}</span>
+        <Link
+          to={`/players/${playerB.id}`}
+          className="flex min-w-0 flex-1 flex-col items-center gap-2 text-center hover:text-primary"
+        >
+          <PlayerAvatar
+            name={playerB.full_name}
+            photoUrl={playerB.photo_url}
+            size="lg"
+            className="h-12 w-12 sm:h-14 sm:w-14"
+          />
+          <span className="w-full truncate font-bold">{playerB.full_name}</span>
           {playerB.grade && <GradeBadge grade={playerB.grade} />}
         </Link>
       </div>
@@ -85,7 +112,7 @@ export function MatchComparisonCard({ date, playerA, playerB, headToHead, result
       {result && (
         <>
           <StatRow label="Score" valueA={result.frames_a} valueB={result.frames_b} />
-          <div className="border-b border-border px-4 py-3">
+          <div className="border-b border-border px-3 py-3 sm:px-4">
             <div className="flex items-center justify-between">
               <span
                 className={cn(
@@ -116,11 +143,19 @@ export function MatchComparisonCard({ date, playerA, playerB, headToHead, result
 
       <StatRow label="Rating" valueA={dash(playerA.rating)} valueB={dash(playerB.rating)} />
       <StatRow label="Record" valueA={record(playerA)} valueB={record(playerB)} />
-      <StatRow label="Form (Last 5)" valueA={dash(playerA.form_5)} valueB={dash(playerB.form_5)} />
-      <StatRow label="Form (Last 10)" valueA={dash(playerA.form_10)} valueB={dash(playerB.form_10)} />
+      <StatRow
+        label={<FormLabel short="Form L5" full="Form (Last 5)" />}
+        valueA={dash(playerA.form_5)}
+        valueB={dash(playerB.form_5)}
+      />
+      <StatRow
+        label={<FormLabel short="Form L10" full="Form (Last 10)" />}
+        valueA={dash(playerA.form_10)}
+        valueB={dash(playerB.form_10)}
+      />
 
-      <div className="px-4 py-3">
-        <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="px-3 py-3 sm:px-4">
+        <div className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <span>{headToHead.winsA} wins</span>
           <span>Head-to-Head</span>
           <span>{headToHead.winsB} wins</span>

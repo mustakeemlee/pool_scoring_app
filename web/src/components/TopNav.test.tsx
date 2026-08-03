@@ -42,7 +42,7 @@ describe('TopNav', () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/dashboard');
-    expect(screen.getByRole('link', { name: 'Leaderboard' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Leaderboard' })).toHaveAttribute('href', '/leaderboard');
     expect(screen.getByRole('link', { name: 'Grades' })).toHaveAttribute('href', '/grades');
     expect(screen.getByRole('link', { name: 'Matches' })).toHaveAttribute('href', '/matches');
     expect(screen.getByRole('link', { name: 'Explore' })).toHaveAttribute('href', '/explore');

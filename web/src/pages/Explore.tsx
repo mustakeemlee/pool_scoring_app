@@ -77,10 +77,10 @@ export function ExplorePage() {
                   <li key={player.id} className="border-b border-border last:border-0">
                     <Link
                       to={`/players/${player.id}`}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-foreground/5"
+                      className="flex min-w-0 items-center gap-3 px-4 py-3 hover:bg-foreground/5"
                     >
                       <PlayerAvatar name={player.full_name} photoUrl={player.photo_url} size="sm" />
-                      <span className="font-semibold">{player.full_name}</span>
+                      <span className="min-w-0 flex-1 truncate font-semibold">{player.full_name}</span>
                     </Link>
                   </li>
                 ))}
@@ -108,7 +108,7 @@ export function ExplorePage() {
                   return (
                     <li key={season.id} className="border-b border-border last:border-0">
                       {season.status === 'active' ? (
-                        <Link to="/" className="block hover:bg-foreground/5">
+                        <Link to="/leaderboard" className="block hover:bg-foreground/5">
                           {row}
                         </Link>
                       ) : (

@@ -4,9 +4,9 @@ import { AdminSidebar } from './AdminSidebar';
 
 export function AdminLayout() {
   return (
-    <div className="flex gap-6">
+    <div className="flex flex-col gap-6 md:flex-row">
       <AdminSidebar />
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <Outlet />
       </div>
     </div>

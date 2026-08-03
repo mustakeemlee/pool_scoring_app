@@ -109,7 +109,7 @@ describe('ExplorePage', () => {
 
     await user.type(screen.getByPlaceholderText(/search players, matches, seasons/i), 'season');
 
-    expect(screen.getByRole('link', { name: /Test season/ })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: /Test season/ })).toHaveAttribute('href', '/leaderboard');
     const seasonsSection = screen.getByText(/Seasons/).closest('section') as HTMLElement;
     expect(within(seasonsSection).getByText('Seed Season')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Seed Season/ })).not.toBeInTheDocument();

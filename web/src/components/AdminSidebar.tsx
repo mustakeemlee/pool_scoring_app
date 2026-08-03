@@ -13,16 +13,16 @@ const links = [
 
 export function AdminSidebar() {
   return (
-    <aside className="card-surface h-fit w-52 shrink-0 p-4">
+    <aside className="card-surface h-fit shrink-0 p-4 md:w-52">
       <p className="text-accent mb-3 text-xs font-bold uppercase tracking-widest">Admin</p>
-      <nav className="flex flex-col gap-1">
+      <nav className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-1">
         {links.map((link) => (
           <NavLink
             key={link.to}
             to={link.to}
             className={({ isActive }) =>
               cn(
-                'rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-foreground/10',
+                'rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors hover:bg-foreground/10 md:text-left',
                 isActive && 'bg-primary text-primary-foreground hover:bg-primary',
               )
             }

@@ -1,4 +1,5 @@
 // web/src/pages/GradeRoster.tsx
+import { ChevronLeft } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
@@ -37,6 +38,13 @@ export function GradeRosterPage() {
 
   return (
     <div>
+      <Link
+        to="/grades"
+        className="text-muted-foreground hover:text-foreground mb-4 inline-flex items-center gap-1 text-sm font-semibold"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Back to Grades
+      </Link>
       <div className="fpl-gradient-soft mb-6 rounded-2xl border border-border px-6 py-8">
         <div className="mb-3 flex justify-center sm:justify-start">
           <SeasonPillSwitcher
@@ -62,11 +70,11 @@ export function GradeRosterPage() {
             <li key={player.player_id} className="border-b border-border last:border-0">
               <Link
                 to={`/players/${player.player_id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-foreground/5"
+                className="flex min-w-0 items-center gap-3 px-4 py-3 hover:bg-foreground/5"
               >
                 <PlayerAvatar name={player.full_name} photoUrl={player.photo_url} size="sm" />
-                <span className="flex-1 font-semibold">{player.full_name}</span>
-                <span className="text-muted-foreground text-sm tabular-nums">{player.rating}</span>
+                <span className="min-w-0 flex-1 truncate font-semibold">{player.full_name}</span>
+                <span className="text-muted-foreground shrink-0 text-sm tabular-nums">{player.rating}</span>
               </Link>
             </li>
           ))}

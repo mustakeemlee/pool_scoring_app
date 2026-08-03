@@ -27,17 +27,44 @@ vi.mock('@/hooks/useLeaderboard', () => ({
 }));
 
 const mockUseAuth = vi.fn();
+const mockUseIsAdmin = vi.fn();
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
 vi.mock('@/hooks/useIsAdmin', () => ({
-  useIsAdmin: () => ({ data: undefined, isLoading: false, isError: false }),
+  useIsAdmin: () => mockUseIsAdmin(),
 }));
 
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ theme: 'dark', toggleTheme: vi.fn() }),
+}));
+
+// Dashboard now renders at the redirected-to root route ("/"), so it needs
+// the same hook mocks as Dashboard.test.tsx.
+vi.mock('@/hooks/useUserProfile', () => ({
+  useUserProfile: () => ({ data: { linkedPlayerId: null, pendingClaim: null }, isLoading: false, isError: false }),
+}));
+vi.mock('@/hooks/usePendingClaims', () => ({
+  usePendingClaims: () => ({ data: [], isLoading: false, isError: false }),
+}));
+vi.mock('@/hooks/useRecentActivity', () => ({
+  useRecentActivity: () => ({
+    data: { recentMatches: [], recentPlayers: [] },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+vi.mock('@/hooks/useSeasonInFlight', () => ({
+  useSeasonInFlight: () => ({
+    data: { season: null, matchesPlayed: 0, activePlayerCount: 0, daysElapsed: 0 },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+vi.mock('@/hooks/usePlayerOfTheWeek', () => ({
+  usePlayerOfTheWeek: () => ({ data: null, isLoading: false, isError: false }),
 }));
 
 function renderApp() {
@@ -59,16 +86,28 @@ describe('App', () => {
 
   it('redirects an unauthenticated visitor at the root route to the login page', () => {
     mockUseAuth.mockReturnValue({ session: null, isLoading: false });
+    mockUseIsAdmin.mockReturnValue({ data: undefined, isLoading: false, isError: false });
     renderApp();
-    expect(screen.getByText('Pool League')).toBeInTheDocument();
+    expect(screen.getByText('PoolIQ')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Log In' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Leaderboard' })).not.toBeInTheDocument();
   });
 
-  it('renders the leaderboard page at the root route once logged in', () => {
+  it('redirects the root route to the dashboard once logged in', () => {
     mockUseAuth.mockReturnValue({ session: { user: { id: 'user-1' } }, isLoading: false });
+    mockUseIsAdmin.mockReturnValue({ data: false, isLoading: false, isError: false });
     renderApp();
-    expect(screen.getByText('Pool League')).toBeInTheDocument();
+    expect(screen.getByText('PoolIQ')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Welcome' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/dashboard');
+  });
+
+  it('renders the leaderboard page at /leaderboard once logged in', () => {
+    mockUseAuth.mockReturnValue({ session: { user: { id: 'user-1' } }, isLoading: false });
+    mockUseIsAdmin.mockReturnValue({ data: false, isLoading: false, isError: false });
+    window.history.pushState({}, '', '/leaderboard');
+    renderApp();
+    expect(screen.getByText('PoolIQ')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Leaderboard' })).toBeInTheDocument();
   });
 });

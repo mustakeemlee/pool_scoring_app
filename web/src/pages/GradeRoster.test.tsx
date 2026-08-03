@@ -68,6 +68,14 @@ describe('GradeRosterPage', () => {
     expect(screen.getByText('1900')).toBeInTheDocument();
   });
 
+  it('renders a back link to the Grades page', () => {
+    mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(SEASON, [SEASON]));
+    mockUseGradeRoster.mockReturnValue({ data: [], isLoading: false, isError: false });
+
+    renderPage();
+    expect(screen.getByRole('link', { name: /Back to Grades/ })).toHaveAttribute('href', '/grades');
+  });
+
   it('passes the season id and the route grade through to useGradeRoster', () => {
     mockUseSeasonSelector.mockReturnValue(seasonSelectorReturn(SEASON, [SEASON]));
     mockUseGradeRoster.mockReturnValue({ data: [], isLoading: false, isError: false });
